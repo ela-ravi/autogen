@@ -2,6 +2,22 @@
 
 Fast command reference for common tasks.
 
+## 🔑 Setup (First Time Only)
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Configure API key
+cp .env.example .env
+# Edit .env and add: OPENAI_API_KEY=sk-your-key-here
+
+# 3. Verify paths
+python verify_paths.py
+```
+
+---
+
 ## 🚀 Complete Workflow
 
 ```bash

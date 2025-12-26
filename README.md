@@ -4,13 +4,13 @@ This repository contains various Autogen-based projects.
 
 ## 📦 Projects
 
-### 🎬 [Video Transcription & AI Recap Generator](./transcribe_video/)
+### 🎬 [Auto Recap Agent](./auto_recap_agent/)
 
 AI-powered video processing system for transcription, translation, and automated recap generation.
 
 **Quick Start:**
 ```bash
-cd transcribe_video
+cd auto_recap_agent
 python run_recap_workflow.py /path/to/video.mp4
 ```
 
@@ -22,7 +22,7 @@ python run_recap_workflow.py /path/to/video.mp4
 - Text-to-speech narration
 - Complete modular workflow
 
-**Documentation:** See [transcribe_video/README.md](./transcribe_video/README.md)
+**Documentation:** See [auto_recap_agent/README.md](./auto_recap_agent/README.md)
 
 ---
 
@@ -42,11 +42,11 @@ Navigate to the project directory and follow its README.
 
 ```
 autogen/
-├── transcribe_video/      # Video processing & AI recaps
+├── auto_recap_agent/      # Video processing & AI recaps
 │   ├── README.md          # Complete documentation
 │   ├── modules/           # Core logic
 │   ├── scripts/           # CLI tools
-│   └── docs/              # Detailed guides
+│   └── output/            # Generated files
 │
 └── [future projects]/     # Other Autogen projects
 ```
@@ -55,10 +55,10 @@ autogen/
 
 ## 🛠️ Setup
 
-Each project has its own setup. For example, for `transcribe_video`:
+Each project has its own setup. For example, for `auto_recap_agent`:
 
 ```bash
-cd transcribe_video
+cd auto_recap_agent
 pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your API keys

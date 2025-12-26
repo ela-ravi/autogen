@@ -2,10 +2,26 @@
 
 Quick reference for where all output files are located.
 
+## 🔑 Prerequisites
+
+Before running, make sure you have:
+```bash
+# 1. API key configured
+cat .env  # Should show: OPENAI_API_KEY=sk-...
+
+# 2. Dependencies installed
+pip install -r requirements.txt
+
+# 3. FFmpeg installed
+ffmpeg -version
+```
+
+---
+
 ## All Output Files Location
 
 ```
-transcribe_video/output/
+auto_recap_agent/output/
 ```
 
 ## File Paths by Type
@@ -57,7 +73,7 @@ audio_file = get_output_path("output/audio/recap_narration.mp3")
 
 ### Command Line
 ```bash
-# All scripts reference relative to transcribe_video/
+# All scripts reference relative to auto_recap_agent/
 python scripts/03_generate_recap.py output/transcriptions/transcription.txt
 python scripts/04_extract_clips.py video.mp4 output/transcriptions/recap_data.json
 python scripts/06_generate_tts.py output/transcriptions/recap_text.txt

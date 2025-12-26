@@ -22,7 +22,7 @@ Example:
     python run_recap_workflow.py /path/to/video.mp4 --no-translate --voice shimmer
 
 Output:
-    transcribe_video/output/videos/recap_video_with_narration.mp4
+    auto_recap_agent/output/videos/recap_video_with_narration.mp4
 """
 
 import sys
@@ -244,7 +244,7 @@ def main():
             print(f"   Duration: {args.duration} seconds")
         
         print(f"\n✅ Your video recap with AI narration is ready!")
-        print(f"\n📁 All generated files are in: transcribe_video/output/\n")
+        print(f"\n📁 All generated files are in: auto_recap_agent/output/\n")
         
     except KeyboardInterrupt:
         print("\n\n⚠️  Workflow interrupted by user")

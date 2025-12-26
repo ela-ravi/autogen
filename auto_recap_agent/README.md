@@ -1,6 +1,6 @@
-# Video Transcription & AI Recap Generator
+# Auto Recap Agent
 
-A modular, AI-powered video processing system for transcription, translation, and automated recap generation with voiceover narration.
+AI-powered video processing agent for automatic transcription, translation, and recap generation with voiceover narration.
 
 ## 🎯 Features
 
@@ -17,18 +17,39 @@ A modular, AI-powered video processing system for transcription, translation, an
 
 ## 🚀 Quick Start
 
+> 📖 **New user?** See [SETUP.md](SETUP.md) for detailed setup instructions.
+
 ### 1. Installation
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
 ```
 
-### 2. Run Complete Workflow
+### 2. Configure API Keys
+
+```bash
+# Copy example environment file
+cp .env.example .env
+
+# Edit .env and add your OpenAI API key
+nano .env  # or use your favorite editor
+```
+
+**Required in `.env`:**
+```bash
+OPENAI_API_KEY=sk-...your-key-here...
+```
+
+**Optional in `.env`:**
+```bash
+model=gpt-4  # GPT model for AI analysis (default: gpt-4)
+             # Options: gpt-4, gpt-4-turbo, gpt-4o, gpt-3.5-turbo
+```
+
+**Get your API key:** https://platform.openai.com/api-keys
+
+### 3. Run Complete Workflow
 
 ```bash
 python run_recap_workflow.py /path/to/your/video.mp4
@@ -48,7 +69,7 @@ That's it! The script will:
 ## 📂 Project Structure
 
 ```
-transcribe_video/
+auto_recap_agent/
 ├── run_recap_workflow.py      # Master script (runs everything)
 ├── test_modular_workflow.py   # Test suite
 ├── QUICK_REFERENCE.md          # Command cheat sheet
@@ -113,10 +134,24 @@ See [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for more examples and options.
 
 ### Environment Variables (.env)
 
+**Required:**
 ```bash
-OPENAI_API_KEY=your_api_key_here
-model=gpt-4
+OPENAI_API_KEY=sk-...your-key-here...
 ```
+Get your API key from: https://platform.openai.com/api-keys
+
+**Optional:**
+```bash
+model=gpt-4                    # GPT model for AI analysis
+                               # Options: gpt-4, gpt-4-turbo, gpt-4o, gpt-3.5-turbo
+                               # Default: gpt-4
+```
+
+### What the API is used for:
+- **GPT-4**: Analyzing transcripts and generating recap suggestions
+- **GPT-4**: Translating transcripts (optional, if you use --translate)
+- **Whisper**: Transcribing video audio (runs locally, no API cost)
+- **TTS (Text-to-Speech)**: Generating voiceover narration
 
 ### Master Script Options
 
@@ -159,6 +194,7 @@ python run_recap_workflow.py /path/to/video.mp4 \
 
 ## 📚 Documentation
 
+- **`SETUP.md`** - Complete setup guide for new users
 - **`QUICK_REFERENCE.md`** - Quick command reference with examples
 - **`OUTPUT_PATHS.md`** - Output file locations reference
 
@@ -194,14 +230,24 @@ Add narration to videos for accessibility.
 ## 🛠️ Troubleshooting
 
 ### "Import errors"
-Make sure you're running scripts from the `transcribe_video` directory:
+Make sure you're running scripts from the `auto_recap_agent` directory:
 ```bash
-cd transcribe_video
+cd auto_recap_agent
 python run_recap_workflow.py /path/to/video.mp4
 ```
 
 ### "OpenAI API error"
-Check your `.env` file has valid `OPENAI_API_KEY`.
+Check your `.env` file has a valid `OPENAI_API_KEY`:
+```bash
+# Open .env file
+cat .env
+
+# Should contain:
+OPENAI_API_KEY=sk-...your-actual-key...
+
+# If missing or incorrect, get a new key from:
+# https://platform.openai.com/api-keys
+```
 
 ### "File not found"
 Previous step may have failed. Run steps individually to identify the issue.
@@ -216,11 +262,30 @@ Try:
 
 ## 📦 Dependencies
 
-- `openai` - GPT-4 and TTS API
-- `whisper` - Speech recognition
-- `moviepy` - Video processing
-- `python-dotenv` - Environment management
-- `pydub` (optional) - Audio duration analysis
+**Core Libraries:**
+- `openai` - GPT-4 for AI analysis, TTS for narration
+- `openai-whisper` - Local speech recognition (no API needed)
+- `moviepy` - Video processing and editing
+- `python-dotenv` - Environment variable management
+
+**Optional:**
+- `pydub` - Audio duration analysis
+
+**System Requirements:**
+- Python 3.7+
+- FFmpeg (for video/audio processing)
+
+Install FFmpeg:
+```bash
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt install ffmpeg
+
+# Windows
+# Download from: https://ffmpeg.org/download.html
+```
 
 See `requirements.txt` for complete list.
 
