@@ -113,6 +113,14 @@ CRITICAL REQUIREMENTS:
     
     recap_data = json.loads(result_text.strip())
     
+    # #region agent log
+    import time
+    clip_durations = [(c.get('end',0) - c.get('start',0)) for c in recap_data.get('clip_timings',[])]
+    total_clip_duration = sum(clip_durations)
+    with open('/Volumes/Development/Practise/autogen/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"A","location":"video_processing.py:180","message":"AI generated clip timings","data":{"clip_count":len(recap_data.get('clip_timings',[])),"clip_durations":clip_durations,"total_duration":total_clip_duration,"target_duration":target_duration},"timestamp":int(time.time()*1000)})+'\n')
+    # #endregion
+    
     # Save recap data
     output_path = get_output_path(output_dir)
     os.makedirs(output_path, exist_ok=True)
@@ -177,6 +185,10 @@ def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, out
     # Extract clips
     clips = []
     total_clips_duration = 0
+    # #region agent log
+    import time
+    extraction_log = []
+    # #endregion
     for i, timing in enumerate(clip_timings, 1):
         start = timing.get("start", 0)
         end = timing.get("end", start + 1)
@@ -184,13 +196,32 @@ def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, out
         
         print(f"Extracting clip {i}/{len(clip_timings)}: {start}s-{end}s ({reason})")
         
-        clip = video.subclip(start, end)
-        clips.append(clip)
-        total_clips_duration += (end - start)
+        # #region agent log
+        try:
+            # #endregion
+            clip = video.subclip(start, end)
+            clips.append(clip)
+            clip_duration = (end - start)
+            total_clips_duration += clip_duration
+            # #region agent log
+            extraction_log.append({"clip_num":i,"start":start,"end":end,"duration":clip_duration,"success":True})
+        except Exception as e:
+            extraction_log.append({"clip_num":i,"start":start,"end":end,"error":str(e),"success":False})
+            print(f"Failed to extract clip {i}: {e}")
+    
+    with open('/Volumes/Development/Practise/autogen/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"B","location":"video_processing.py:197","message":"Clip extraction complete","data":{"total_clips_attempted":len(clip_timings),"successful_clips":len(clips),"total_duration":total_clips_duration,"extraction_details":extraction_log},"timestamp":int(time.time()*1000)})+'\n')
+    # #endregion
     
     # Concatenate clips
     print("Combining clips...")
     final_clip = concatenate_videoclips(clips, method="compose")
+    
+    # #region agent log
+    concat_duration = final_clip.duration if hasattr(final_clip, 'duration') else 0
+    with open('/Volumes/Development/Practise/autogen/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"C","location":"video_processing.py:223","message":"After concatenation","data":{"concatenated_duration":concat_duration,"num_clips":len(clips),"target_duration":target_duration},"timestamp":int(time.time()*1000)})+'\n')
+    # #endregion
     
     # Adjust to exactly target_duration
     current_duration = final_clip.duration
@@ -229,13 +260,20 @@ def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, out
     output_file = os.path.join(output_path, "recap_video.mp4")
     print(f"Writing video to {output_file}...")
     
+    # Create temp directory for MoviePy temporary files
+    temp_dir = get_output_path("output/temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_audio_file = os.path.join(temp_dir, "temp-audio.m4a")
+    
     final_clip.write_videofile(
         output_file,
         codec="libx264",
         audio_codec="aac",
-        temp_audiofile="temp-audio.m4a",
-        remove_temp=True
+        temp_audiofile=temp_audio_file,
+        remove_temp=False  # Keep temp file for debugging
     )
+    
+    print(f"   Temp audio preserved: {temp_audio_file}")
     
     # Clean up
     video.close()

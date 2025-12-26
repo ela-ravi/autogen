@@ -29,8 +29,8 @@ import sys
 import os
 import argparse
 
-# Add transcribe_video to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'transcribe_video'))
+# Add current directory to path for module imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from modules.transcription import transcribe_video, translate_transcription
 from modules.video_processing import generate_recap_suggestions, extract_and_merge_clips, remove_audio_from_video
@@ -81,7 +81,27 @@ def main():
     parser.add_argument("--pad-with-black", action="store_true",
                         help="Pad video with black frames if shorter than target duration")
     
+    # Dry-run options for debugging
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Skip expensive operations, use existing files (useful for debugging)")
+    parser.add_argument("--skip-transcribe", action="store_true",
+                        help="Skip transcription, use existing transcription.txt")
+    parser.add_argument("--skip-recap", action="store_true",
+                        help="Skip AI recap generation, use existing recap_data.json")
+    parser.add_argument("--skip-extract", action="store_true",
+                        help="Skip video extraction, use existing recap_video.mp4")
+    parser.add_argument("--skip-tts", action="store_true",
+                        help="Skip TTS generation, use existing audio file")
+    
     args = parser.parse_args()
+    
+    # If dry-run is set, enable all skip flags
+    if args.dry_run:
+        args.skip_transcribe = True
+        args.skip_recap = True
+        args.skip_extract = True
+        args.skip_tts = True
+        print("\n🔍 DRY-RUN MODE: Using existing files, skipping expensive operations\n")
     
     # Validate video file
     if not os.path.exists(args.video_path):
@@ -99,10 +119,22 @@ def main():
         
         # Step 1: Transcribe video
         print_header("STEP 1/7: Transcribe Video")
-        transcription_file = transcribe_video(
-            video_path=args.video_path,
-            model_size=args.model
-        )
+        if args.skip_transcribe:
+            transcription_file = os.path.join(
+                os.path.dirname(__file__),
+                "output/transcriptions/transcription.txt"
+            )
+            if os.path.exists(transcription_file):
+                print(f"⏭️  Skipping transcription, using existing file: {transcription_file}")
+            else:
+                print(f"❌ Error: Transcription file not found: {transcription_file}")
+                print("   Run without --skip-transcribe first to generate it.")
+                sys.exit(1)
+        else:
+            transcription_file = transcribe_video(
+                video_path=args.video_path,
+                model_size=args.model
+            )
         
         # Step 2: Translate (optional)
         if args.translate:
@@ -118,19 +150,43 @@ def main():
         
         # Step 3: Generate recap suggestions
         print_header("STEP 3/7: Generate AI Recap Suggestions")
-        recap_data_file = generate_recap_suggestions(
-            transcription_file=transcription_file,
-            target_duration=args.duration
-        )
+        if args.skip_recap:
+            recap_data_file = os.path.join(
+                os.path.dirname(__file__),
+                "output/transcriptions/recap_data.json"
+            )
+            if os.path.exists(recap_data_file):
+                print(f"⏭️  Skipping recap generation, using existing file: {recap_data_file}")
+            else:
+                print(f"❌ Error: Recap data file not found: {recap_data_file}")
+                print("   Run without --skip-recap first to generate it.")
+                sys.exit(1)
+        else:
+            recap_data_file = generate_recap_suggestions(
+                transcription_file=transcription_file,
+                target_duration=args.duration
+            )
         
         # Step 4: Extract and merge clips
         print_header("STEP 4/7: Extract and Merge Video Clips")
-        recap_video_file = extract_and_merge_clips(
-            video_path=args.video_path,
-            recap_data_file=recap_data_file,
-            target_duration=args.duration,
-            pad_with_black=args.pad_with_black
-        )
+        if args.skip_extract:
+            recap_video_file = os.path.join(
+                os.path.dirname(__file__),
+                "output/videos/recap_video.mp4"
+            )
+            if os.path.exists(recap_video_file):
+                print(f"⏭️  Skipping video extraction, using existing file: {recap_video_file}")
+            else:
+                print(f"❌ Error: Recap video not found: {recap_video_file}")
+                print("   Run without --skip-extract first to generate it.")
+                sys.exit(1)
+        else:
+            recap_video_file = extract_and_merge_clips(
+                video_path=args.video_path,
+                recap_data_file=recap_data_file,
+                target_duration=args.duration,
+                pad_with_black=args.pad_with_black
+            )
         
         # Step 5: Remove audio (optional)
         if args.remove_original_audio:
@@ -147,12 +203,24 @@ def main():
             os.path.dirname(recap_data_file),
             "recap_text.txt"
         )
-        audio_file = generate_tts_audio(
-            recap_text_file=recap_text_file,
-            target_duration=args.duration,
-            tts_model=args.tts_model,
-            tts_voice=args.voice
-        )
+        if args.skip_tts:
+            audio_file = os.path.join(
+                os.path.dirname(__file__),
+                "output/audio/recap_narration.mp3"
+            )
+            if os.path.exists(audio_file):
+                print(f"⏭️  Skipping TTS generation, using existing file: {audio_file}")
+            else:
+                print(f"❌ Error: Audio file not found: {audio_file}")
+                print("   Run without --skip-tts first to generate it.")
+                sys.exit(1)
+        else:
+            audio_file = generate_tts_audio(
+                recap_text_file=recap_text_file,
+                target_duration=args.duration,
+                tts_model=args.tts_model,
+                tts_voice=args.voice
+            )
         
         # Step 7: Merge audio with video
         print_header("STEP 7/7: Merge Audio with Video")

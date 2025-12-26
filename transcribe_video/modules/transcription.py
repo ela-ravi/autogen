@@ -10,8 +10,8 @@ import json
 import whisper
 from moviepy.editor import VideoFileClip
 
-# Get the directory where this file is located
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Get the directory where this file is located (parent of modules/)
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def get_output_path(relative_path):
     """Convert relative output path to absolute path"""
@@ -42,12 +42,21 @@ def transcribe_video(video_path, output_dir="output/transcriptions", model_size=
     # Load Whisper model
     model = whisper.load_model(model_size)
     
+    # Create output directories
+    output_path = get_output_path(output_dir)
+    os.makedirs(output_path, exist_ok=True)
+    
+    original_dir = get_output_path("output/original")
+    os.makedirs(original_dir, exist_ok=True)
+    
     # Extract audio from video
     print("Extracting audio from video...")
     video = VideoFileClip(video_path)
-    temp_audio = "temp_audio.wav"
+    temp_audio = os.path.join(original_dir, "extracted_audio.wav")
     video.audio.write_audiofile(temp_audio, verbose=False, logger=None)
     video.close()
+    
+    print(f"Audio extracted to: {temp_audio}")
     
     # Transcribe audio
     print("Transcribing audio...")
@@ -80,14 +89,18 @@ def transcribe_video(video_path, output_dir="output/transcriptions", model_size=
         for segment in transcript_data:
             f.write(f"{segment['start']:.2f}s to {segment['end']:.2f}s: {segment['text']}\n")
     
-    # Clean up temp audio
-    if os.path.exists(temp_audio):
-        os.remove(temp_audio)
+    # Save full transcription text to original folder
+    full_text_file = os.path.join(original_dir, "full_transcription.txt")
+    with open(full_text_file, "w") as f:
+        for segment in transcript_data:
+            f.write(f"{segment['text']}\n")
     
     print(f"✅ Transcription complete!")
     print(f"   Segments: {len(transcript_data)}")
     print(f"   JSON: {json_file}")
     print(f"   Text: {txt_file}")
+    print(f"   Full text: {full_text_file}")
+    print(f"   Extracted audio: {temp_audio} (preserved)")
     
     return txt_file
 

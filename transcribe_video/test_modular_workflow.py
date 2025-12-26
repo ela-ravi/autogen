@@ -8,8 +8,8 @@ This script tests each module individually to ensure they work correctly.
 import os
 import sys
 
-# Add transcribe_video to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'transcribe_video'))
+# Add current directory to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def test_module_imports():
     """Test that all modules can be imported"""
@@ -38,17 +38,17 @@ def test_file_structure():
     
     base_dir = os.path.dirname(__file__)
     required_files = [
-        "transcribe_video/modules/__init__.py",
-        "transcribe_video/modules/transcription.py",
-        "transcribe_video/modules/video_processing.py",
-        "transcribe_video/modules/audio_processing.py",
-        "transcribe_video/scripts/01_transcribe.py",
-        "transcribe_video/scripts/02_translate.py",
-        "transcribe_video/scripts/03_generate_recap.py",
-        "transcribe_video/scripts/04_extract_clips.py",
-        "transcribe_video/scripts/05_remove_audio.py",
-        "transcribe_video/scripts/06_generate_tts.py",
-        "transcribe_video/scripts/07_merge_audio_video.py",
+        "modules/__init__.py",
+        "modules/transcription.py",
+        "modules/video_processing.py",
+        "modules/audio_processing.py",
+        "scripts/01_transcribe.py",
+        "scripts/02_translate.py",
+        "scripts/03_generate_recap.py",
+        "scripts/04_extract_clips.py",
+        "scripts/05_remove_audio.py",
+        "scripts/06_generate_tts.py",
+        "scripts/07_merge_audio_video.py",
         "run_recap_workflow.py"
     ]
     
@@ -78,25 +78,25 @@ def show_usage_examples():
         ]),
         ("Individual Steps", [
             "# Step 1: Transcribe",
-            "python transcribe_video/scripts/01_transcribe.py /path/to/video.mp4",
+            "python scripts/01_transcribe.py /path/to/video.mp4",
             "",
             "# Step 2: Translate (optional)",
-            "python transcribe_video/scripts/02_translate.py transcribe_video/output/transcriptions/transcription.txt English Tamil",
+            "python scripts/02_translate.py output/transcriptions/transcription.txt English Tamil",
             "",
             "# Step 3: Generate recap",
-            "python transcribe_video/scripts/03_generate_recap.py transcribe_video/output/transcriptions/transcription.txt",
+            "python scripts/03_generate_recap.py output/transcriptions/transcription.txt",
             "",
             "# Step 4: Extract clips",
-            "python transcribe_video/scripts/04_extract_clips.py /path/to/video.mp4 transcribe_video/output/transcriptions/recap_data.json",
+            "python scripts/04_extract_clips.py /path/to/video.mp4 output/transcriptions/recap_data.json",
             "",
             "# Step 5: Remove audio (optional)",
-            "python transcribe_video/scripts/05_remove_audio.py transcribe_video/output/videos/recap_video.mp4",
+            "python scripts/05_remove_audio.py output/videos/recap_video.mp4",
             "",
             "# Step 6: Generate TTS",
-            "python transcribe_video/scripts/06_generate_tts.py transcribe_video/output/transcriptions/recap_text.txt",
+            "python scripts/06_generate_tts.py output/transcriptions/recap_text.txt",
             "",
             "# Step 7: Merge audio and video",
-            "python transcribe_video/scripts/07_merge_audio_video.py transcribe_video/output/videos/recap_video.mp4 transcribe_video/output/audio/recap_narration.mp3"
+            "python scripts/07_merge_audio_video.py output/videos/recap_video.mp4 output/audio/recap_narration.mp3"
         ])
     ]
     
