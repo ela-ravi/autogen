@@ -64,6 +64,20 @@ That's it! The script will:
 
 **Output:** `output/videos/recap_video_with_narration.mp4`
 
+### 4. Resume from Checkpoint (Save Time & Costs!)
+
+```bash
+# Interactive menu - automatically detects what exists
+python resume_workflow.py /path/to/video.mp4
+
+# Or resume from specific point
+python resume/03_from_recap_generation.py /path/to/video.mp4  # Skip transcription
+python resume/05_from_tts_generation.py --voice shimmer        # Change voice only
+```
+
+> 💡 **Save API costs**: Resume from any checkpoint instead of re-running everything!  
+> See [resume/README.md](resume/README.md) for details.
+
 ---
 
 ## 📂 Project Structure
@@ -71,6 +85,7 @@ That's it! The script will:
 ```
 video_recap_agent/
 ├── run_recap_workflow.py      # Master script (runs everything)
+├── resume_workflow.py          # Resume from any checkpoint
 ├── test_modular_workflow.py   # Test suite
 ├── QUICK_REFERENCE.md          # Command cheat sheet
 ├── README.md                   # This file
@@ -88,6 +103,15 @@ video_recap_agent/
 │   ├── 05_remove_audio.py
 │   ├── 06_generate_tts.py
 │   └── 07_merge_audio_video.py
+│
+├── resume/                     # Resume from checkpoints
+│   ├── README.md               # Resume scripts guide
+│   ├── 01_from_audio_extraction.py
+│   ├── 02_from_transcription.py
+│   ├── 03_from_recap_generation.py
+│   ├── 04_from_clip_extraction.py
+│   ├── 05_from_tts_generation.py
+│   └── 06_from_audio_merge.py
 │
 └── output/                     # Generated files
     ├── transcriptions/
@@ -197,6 +221,7 @@ python run_recap_workflow.py /path/to/video.mp4 \
 - **`SETUP.md`** - Complete setup guide for new users
 - **`QUICK_REFERENCE.md`** - Quick command reference with examples
 - **`OUTPUT_PATHS.md`** - Output file locations reference
+- **`resume/README.md`** - Resume workflow from checkpoints (save time & costs!)
 
 ---
 

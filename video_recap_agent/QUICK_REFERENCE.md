@@ -37,6 +37,31 @@ python run_recap_workflow.py /path/to/video.mp4 \
 
 ---
 
+## ⏭️ Resume from Checkpoint (Save Time & Money!)
+
+```bash
+# Interactive menu (auto-detects progress)
+python resume_workflow.py /path/to/video.mp4
+
+# Skip transcription, start from recap
+python resume/03_from_recap_generation.py /path/to/video.mp4 --duration 45
+
+# Regenerate with different voice only
+python resume/05_from_tts_generation.py --voice shimmer --tts-model tts-1-hd
+
+# Just merge audio+video again
+python resume/06_from_audio_merge.py
+
+# Check what exists
+python resume_workflow.py --status
+```
+
+**💡 Saves API costs by reusing existing outputs!**
+
+See [resume/README.md](resume/README.md) for more examples.
+
+---
+
 ## 🔧 Individual Steps
 
 ```bash
