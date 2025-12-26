@@ -65,6 +65,7 @@ checkpoints/
 # Generated/Output Files
 *.txt
 !requirements.txt
+!README.txt
 *.mp4
 *.mp3
 *.wav
@@ -73,6 +74,12 @@ checkpoints/
 *.mkv
 *.flac
 *.m4a
+
+# Recap Generation Files
+recap_data.json
+recap_text.txt
+recap_video.mp4
+temp-audio.m4a
 
 # Logs
 *.log
@@ -91,3 +98,12 @@ scripts/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Output directories (generated files)
+transcribe_video/output/
+!transcribe_video/output/.gitkeep
+
+# Keep structure
+transcribe_video/output/transcriptions/.gitkeep
+transcribe_video/output/videos/.gitkeep
+transcribe_video/output/audio/.gitkeep
