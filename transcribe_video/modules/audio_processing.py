@@ -62,17 +62,12 @@ def generate_tts_audio(recap_text_file, target_duration=30, output_dir="output/a
     
     # Generate TTS audio
     print("Generating audio with OpenAI TTS...")
-    # Optional debug logging
-    try:
-        import time
-        import json
-        debug_log_path = '/Volumes/Development/Practise/autogen/.cursor/debug.log'
-        os.makedirs(os.path.dirname(debug_log_path), exist_ok=True)
-        with open(debug_log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"D","location":"audio_processing.py:pre_tts","message":"Before TTS generation","data":{"text_length":len(recap_text),"text_preview":recap_text[:100],"target_duration":target_duration},"timestamp":int(time.time()*1000)})+'\n')
-    except Exception:
-        pass
-    
+    # #region agent log
+    import time
+    import json
+    with open('/Volumes/Development/Practise/autogen/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"D","location":"audio_processing.py:pre_tts","message":"Before TTS generation","data":{"text_length":len(recap_text),"text_preview":recap_text[:100],"target_duration":target_duration},"timestamp":int(time.time()*1000)})+'\n')
+    # #endregion
     with client.audio.speech.with_streaming_response.create(
         model=tts_model,
         voice=tts_voice,
@@ -96,12 +91,10 @@ def generate_tts_audio(recap_text_file, target_duration=30, output_dir="output/a
     except Exception:
         pass
     
-    # Optional debug logging
-    try:
-        with open(debug_log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"D","location":"audio_processing.py:post_tts","message":"After TTS generation","data":{"actual_duration":actual_duration,"duration_str":duration_str,"file_exists":os.path.exists(output_file)},"timestamp":int(time.time()*1000)})+'\n')
-    except Exception:
-        pass
+    # #region agent log
+    with open('/Volumes/Development/Practise/autogen/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"D","location":"audio_processing.py:post_tts","message":"After TTS generation","data":{"actual_duration":actual_duration,"duration_str":duration_str,"file_exists":os.path.exists(output_file)},"timestamp":int(time.time()*1000)})+'\n')
+    # #endregion
     
     file_size = os.path.getsize(output_file) / 1024
     
@@ -158,16 +151,12 @@ def merge_audio_with_video(video_path, audio_path, output_path=None):
     video_duration = video.duration
     audio_duration = audio.duration
     
-    # Optional debug logging
-    try:
-        import time
-        import json
-        debug_log_path = '/Volumes/Development/Practise/autogen/.cursor/debug.log'
-        os.makedirs(os.path.dirname(debug_log_path), exist_ok=True)
-        with open(debug_log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"E","location":"audio_processing.py:pre_merge","message":"Before audio-video merge","data":{"video_duration":video_duration,"audio_duration":audio_duration,"video_path":video_path,"audio_path":audio_path},"timestamp":int(time.time()*1000)})+'\n')
-    except Exception:
-        pass
+    # #region agent log
+    import time
+    import json
+    with open('/Volumes/Development/Practise/autogen/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"E","location":"audio_processing.py:pre_merge","message":"Before audio-video merge","data":{"video_duration":video_duration,"audio_duration":audio_duration,"video_path":video_path,"audio_path":audio_path},"timestamp":int(time.time()*1000)})+'\n')
+    # #endregion
     
     print(f"\nDuration comparison:")
     print(f"   Video: {video_duration:.1f}s")

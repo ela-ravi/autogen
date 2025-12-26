@@ -51,89 +51,56 @@ def generate_recap_suggestions(transcription_file, target_duration=30, output_di
     
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
-    prompt = f"""You are a professional video editor analyzing a noisy video transcription that contains meaningful English dialogue mixed with gibberish, symbols, non-English text, and background sounds.
+    prompt = f"""You are given a noisy video transcription that contains a mix of English dialogue, names, timestamps, symbols, non-English scripts, and gibberish words.
 
 Transcription:
 {transcript_content}
 
-YOUR TASK: Create a {target_duration}-second video recap using a TWO-PASS clip selection approach.
+Instructions:
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PASS 1: PRIMARY CLIPS (Meaningful Dialogue)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Treat all non-English words, symbols, random syllables, numbers, and unclear phrases as background sounds or music and ignore them completely.
 
-1. Identify segments with clear, meaningful English dialogue
-2. Extract timestamps for these dialogue-driven moments
-3. Calculate total duration of these clips
+2. Extract and consider only clear, meaningful English words and sentences that contribute to dialogue or narrative.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PASS 2: SUPPLEMENTAL CLIPS (Fill to {target_duration} seconds)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. Combine the meaningful English content to understand the overall context and story of the video.
 
-IF primary clips total < {target_duration} seconds:
-1. Identify segments with gibberish/sounds/non-English (unused timestamps)
-2. Select these as "atmospheric" or "transitional" clips
-3. Insert them in CHRONOLOGICAL ORDER (not at the end)
-4. Label them as: "Atmospheric moment", "Visual transition", "Emotional buildup", etc.
-5. Continue until total = EXACTLY {target_duration} seconds
+4. Based on that understanding, generate a recap narration script suitable for voiceover.
 
-IMPORTANT: 
-- Keep all clips in chronological order by timestamp
-- Do NOT duplicate any timestamps
-- Supplemental clips should fit naturally between dialogue clips
+5. The narration must be written in natural, fluent English, with a cohesive beginning, middle, and end.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NARRATION GENERATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. The narration must be timed for {target_duration} seconds of audio, targeting 75–80 words total (do not exceed 80 words).
 
-Based on the FULL clip timeline (dialogue + atmospheric):
-1. Write a natural, cohesive narration (75-80 words)
-2. Account for atmospheric clips as transitions, mood, or buildup
-3. Create smooth narrative flow across all clips
-4. Time for {target_duration} seconds of voiceover
-5. Never mention "gibberish", "errors", or transcription issues
+7. Do not mention transcription errors, missing words, or gibberish in the final output.
 
-Example narration flow:
-"[Dialogue moment] ... [transition acknowledging atmosphere] ... [next dialogue moment]"
+8. Select specific clip timings from the original video based on timestamps where meaningful English dialogue appears. The clips should total EXACTLY {target_duration} seconds.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT FORMAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+Output format:
 Provide your response as JSON:
 {{
-    "recap_text": "Your natural narration (75-80 words, accounts for all clips)",
+    "recap_text": "Your natural, fluent English narration here (75-80 words, no explanations)",
     "clip_timings": [
-        {{"start": 0, "end": 5, "reason": "Opening dialogue", "type": "dialogue"}},
-        {{"start": 10, "end": 13, "reason": "Visual transition", "type": "atmospheric"}},
-        {{"start": 19, "end": 22, "reason": "Key moment", "type": "dialogue"}},
+        {{"start": 0, "end": 5, "reason": "Opening dialogue"}},
+        {{"start": 19, "end": 22, "reason": "Key moment"}},
         ...
     ],
     "total_duration": {target_duration}
 }}
 
-CRITICAL VALIDATION CHECKLIST:
-✓ Sum of (end - start) for ALL clips = EXACTLY {target_duration} seconds
-✓ Clips are in chronological order (sorted by start time)
-✓ No duplicate timestamps
-✓ Narration is 75-80 words
-✓ Narration accounts for atmospheric clips smoothly
-✓ Mix of "dialogue" and "atmospheric" clips if needed
-
-REJECT if:
-✗ Total duration ≠ {target_duration} seconds
-✗ Only dialogue clips and total < {target_duration} seconds (MUST add atmospheric clips)
-✗ Clips out of chronological order
+CRITICAL REQUIREMENTS:
+- The sum of all clip durations (end - start) MUST equal EXACTLY {target_duration} seconds
+- Only include clips where meaningful English dialogue is present
+- Ensure clips flow naturally when combined
+- The recap_text must be voiceover-ready and exactly 75-80 words
 """
     
     print("Analyzing transcript with AI...")
     response = client.chat.completions.create(
         model=os.getenv("model", "gpt-4"),
         messages=[
-            {"role": "system", "content": "You are a professional video editor skilled at creating engaging recaps from noisy transcriptions. You use a TWO-PASS approach: (1) Select dialogue clips first, (2) Fill remaining duration with atmospheric/transition clips from non-dialogue segments. You ALWAYS ensure clips total EXACTLY the target duration by using both dialogue and atmospheric moments. You maintain chronological order and create smooth, natural narrations that account for all clip types. Always respond with valid JSON."},
+            {"role": "system", "content": "You are a professional video editor and content analyst skilled at extracting meaningful content from noisy transcriptions. You excel at filtering out gibberish and focusing on actual dialogue to create engaging recaps. Always respond with valid JSON."},
             {"role": "user", "content": prompt}
         ],
-        max_tokens=2500
+        max_tokens=2000
     )
     
     result_text = response.choices[0].message.content if response.choices else None
@@ -146,53 +113,13 @@ REJECT if:
     
     recap_data = json.loads(result_text.strip())
     
-    # Validate duration
-    clip_timings = recap_data.get('clip_timings', [])
-    actual_duration = sum(clip['end'] - clip['start'] for clip in clip_timings)
-    tolerance = 1.0  # Allow 1 second tolerance
-    
-    if abs(actual_duration - target_duration) > tolerance:
-        print(f"\n⚠️  WARNING: Duration mismatch detected!")
-        print(f"   Target: {target_duration}s")
-        print(f"   Actual: {actual_duration:.2f}s")
-        print(f"   Difference: {abs(actual_duration - target_duration):.2f}s")
-        print(f"\n   This may result in unexpected video/audio sync issues.")
-        print(f"   Consider regenerating with a different duration target.")
-    
-    # Sort clips by start time to ensure chronological order
-    recap_data['clip_timings'] = sorted(clip_timings, key=lambda x: x['start'])
-    
-    # Log clip analysis (optional debug logging)
-    try:
-        import time
-        clip_durations = [(c.get('end',0) - c.get('start',0)) for c in clip_timings]
-        dialogue_clips = [c for c in clip_timings if c.get('type') == 'dialogue']
-        atmospheric_clips = [c for c in clip_timings if c.get('type') == 'atmospheric']
-        
-        debug_log_path = '/Volumes/Development/Practise/autogen/.cursor/debug.log'
-        os.makedirs(os.path.dirname(debug_log_path), exist_ok=True)
-        
-        with open(debug_log_path, 'a') as f:
-            f.write(json.dumps({
-                "sessionId":"debug-session",
-                "runId":"initial",
-                "hypothesisId":"A",
-                "location":"video_processing.py:clip_generation",
-                "message":"AI generated clip timings (TWO-PASS approach)",
-                "data":{
-                    "clip_count":len(clip_timings),
-                    "dialogue_clips":len(dialogue_clips),
-                    "atmospheric_clips":len(atmospheric_clips),
-                    "clip_durations":clip_durations,
-                    "total_duration":actual_duration,
-                    "target_duration":target_duration,
-                    "duration_diff":abs(actual_duration - target_duration)
-                },
-                "timestamp":int(time.time()*1000)
-            })+'\n')
-    except Exception:
-        # Debug logging failed - not critical, continue
-        pass
+    # #region agent log
+    import time
+    clip_durations = [(c.get('end',0) - c.get('start',0)) for c in recap_data.get('clip_timings',[])]
+    total_clip_duration = sum(clip_durations)
+    with open('/Volumes/Development/Practise/autogen/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"A","location":"video_processing.py:180","message":"AI generated clip timings","data":{"clip_count":len(recap_data.get('clip_timings',[])),"clip_durations":clip_durations,"total_duration":total_clip_duration,"target_duration":target_duration},"timestamp":int(time.time()*1000)})+'\n')
+    # #endregion
     
     # Save recap data
     output_path = get_output_path(output_dir)
@@ -208,13 +135,11 @@ REJECT if:
         f.write(recap_data.get("recap_text", ""))
     
     clip_count = len(recap_data.get("clip_timings", []))
-    dialogue_count = len([c for c in recap_data.get("clip_timings", []) if c.get('type') == 'dialogue'])
-    atmospheric_count = len([c for c in recap_data.get("clip_timings", []) if c.get('type') == 'atmospheric'])
     total_duration = recap_data.get("total_duration", 0)
     
     print(f"✅ Recap suggestions generated!")
-    print(f"   Total clips: {clip_count} ({dialogue_count} dialogue + {atmospheric_count} atmospheric)")
-    print(f"   Total duration: {total_duration}s (target: {target_duration}s)")
+    print(f"   Clips suggested: {clip_count}")
+    print(f"   Total duration: {total_duration}s")
     print(f"   Data: {recap_data_file}")
     print(f"   Text: {recap_text_file}")
     
@@ -263,13 +188,7 @@ def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, out
     # #region agent log
     import time
     extraction_log = []
-    # Optional debug logging
-    try:
-        debug_log_path = '/Volumes/Development/Practise/autogen/.cursor/debug.log'
-        os.makedirs(os.path.dirname(debug_log_path), exist_ok=True)
-    except Exception:
-        debug_log_path = None
-    
+    # #endregion
     for i, timing in enumerate(clip_timings, 1):
         start = timing.get("start", 0)
         end = timing.get("end", start + 1)
@@ -290,26 +209,19 @@ def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, out
             extraction_log.append({"clip_num":i,"start":start,"end":end,"error":str(e),"success":False})
             print(f"Failed to extract clip {i}: {e}")
     
-    # Optional debug logging
-    if debug_log_path:
-        try:
-            with open(debug_log_path, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"B","location":"video_processing.py:197","message":"Clip extraction complete","data":{"total_clips_attempted":len(clip_timings),"successful_clips":len(clips),"total_duration":total_clips_duration,"extraction_details":extraction_log},"timestamp":int(time.time()*1000)})+'\n')
-        except Exception:
-            pass
+    with open('/Volumes/Development/Practise/autogen/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"B","location":"video_processing.py:197","message":"Clip extraction complete","data":{"total_clips_attempted":len(clip_timings),"successful_clips":len(clips),"total_duration":total_clips_duration,"extraction_details":extraction_log},"timestamp":int(time.time()*1000)})+'\n')
+    # #endregion
     
     # Concatenate clips
     print("Combining clips...")
     final_clip = concatenate_videoclips(clips, method="compose")
     
-    # Optional debug logging
-    if debug_log_path:
-        try:
-            concat_duration = final_clip.duration if hasattr(final_clip, 'duration') else 0
-            with open(debug_log_path, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"C","location":"video_processing.py:223","message":"After concatenation","data":{"concatenated_duration":concat_duration,"num_clips":len(clips),"target_duration":target_duration},"timestamp":int(time.time()*1000)})+'\n')
-        except Exception:
-            pass
+    # #region agent log
+    concat_duration = final_clip.duration if hasattr(final_clip, 'duration') else 0
+    with open('/Volumes/Development/Practise/autogen/.cursor/debug.log', 'a') as f:
+        f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"C","location":"video_processing.py:223","message":"After concatenation","data":{"concatenated_duration":concat_duration,"num_clips":len(clips),"target_duration":target_duration},"timestamp":int(time.time()*1000)})+'\n')
+    # #endregion
     
     # Adjust to exactly target_duration
     current_duration = final_clip.duration
