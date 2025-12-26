@@ -38,7 +38,7 @@ sudo apt install ffmpeg
 
 ### Step 1: Clone/Download Project
 ```bash
-cd auto_recap_agent
+cd video_recap_agent
 ```
 
 ### Step 2: Install Python Dependencies
