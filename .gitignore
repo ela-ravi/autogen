@@ -100,10 +100,13 @@ ehthumbs.db
 Desktop.ini
 
 # Output directories (generated files)
-transcribe_video/output/
-!transcribe_video/output/.gitkeep
+video_recap_agent/output/
+!video_recap_agent/output/.gitkeep
+video_recap_agent/output_old/
 
 # Keep structure
-transcribe_video/output/transcriptions/.gitkeep
-transcribe_video/output/videos/.gitkeep
-transcribe_video/output/audio/.gitkeep
+video_recap_agent/output/transcriptions/.gitkeep
+video_recap_agent/output/videos/.gitkeep
+video_recap_agent/output/audio/.gitkeep
+video_recap_agent/output/original/.gitkeep
+video_recap_agent/output/temp/.gitkeep

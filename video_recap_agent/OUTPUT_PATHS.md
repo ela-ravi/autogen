@@ -21,7 +21,7 @@ ffmpeg -version
 ## All Output Files Location
 
 ```
-auto_recap_agent/output/
+video_recap_agent/output/
 ```
 
 ## File Paths by Type
@@ -73,7 +73,7 @@ audio_file = get_output_path("output/audio/recap_narration.mp3")
 
 ### Command Line
 ```bash
-# All scripts reference relative to auto_recap_agent/
+# All scripts reference relative to video_recap_agent/
 python scripts/03_generate_recap.py output/transcriptions/transcription.txt
 python scripts/04_extract_clips.py video.mp4 output/transcriptions/recap_data.json
 python scripts/06_generate_tts.py output/transcriptions/recap_text.txt

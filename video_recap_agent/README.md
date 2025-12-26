@@ -1,4 +1,4 @@
-# Auto Recap Agent
+# Video Recap Agent
 
 AI-powered video processing agent for automatic transcription, translation, and recap generation with voiceover narration.
 
@@ -69,7 +69,7 @@ That's it! The script will:
 ## 📂 Project Structure
 
 ```
-auto_recap_agent/
+video_recap_agent/
 ├── run_recap_workflow.py      # Master script (runs everything)
 ├── test_modular_workflow.py   # Test suite
 ├── QUICK_REFERENCE.md          # Command cheat sheet
@@ -230,9 +230,9 @@ Add narration to videos for accessibility.
 ## 🛠️ Troubleshooting
 
 ### "Import errors"
-Make sure you're running scripts from the `auto_recap_agent` directory:
+Make sure you're running scripts from the `video_recap_agent` directory:
 ```bash
-cd auto_recap_agent
+cd video_recap_agent
 python run_recap_workflow.py /path/to/video.mp4
 ```
 
