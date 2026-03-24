@@ -1,0 +1,25 @@
+services:
+  backend:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+      - ./modules:/app/modules
+
+  worker:
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 -Q celery,processing,maintenance
+    volumes:
+      - ./backend:/app
+      - ./modules:/app/modules
+
+  celery-beat:
+    volumes:
+      - ./backend:/app
+      - ./modules:/app/modules
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    command: npm run dev
+    volumes:
+      - ./frontend/src:/app/src

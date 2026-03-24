@@ -1,0 +1,40 @@
+# FastAPI
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+alembic==1.14.1
+
+# Redis
+redis[hiredis]==5.2.1
+
+# Celery
+celery[redis]==5.4.0
+
+# Auth
+PyJWT==2.10.1
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+google-auth==2.37.0
+pydantic[email]==2.10.4
+pydantic-settings==2.7.1
+
+# S3
+boto3==1.36.2
+
+# Stripe
+stripe==11.4.1
+
+# AI / Processing
+openai==1.59.7
+openai-whisper==20240930
+moviepy==1.0.3
+pydub==0.25.1
+
+# Utils
+python-dotenv==1.0.1
+structlog==24.4.0
