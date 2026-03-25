@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'video_recap_agent/**'
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker-compose*.yml'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -26,11 +28,10 @@ jobs:
             set -e
 
             echo "=== Pulling latest code ==="
-            cd ~/video-recap-agent
+            cd ~/videorecap
             git pull origin main
 
             echo "=== Building containers ==="
-            cd video_recap_agent
             docker compose -f docker-compose.yml -f docker-compose.prod.yml build
 
             echo "=== Starting services ==="

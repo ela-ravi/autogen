@@ -24,6 +24,7 @@ docker compose version  # V2 required
 ```bash
 sudo adduser videorecap
 sudo usermod -aG docker videorecap
+sudo chmod 750 /home/videorecap
 ```
 
 ## Step 3: Set Up SSH Key for GitHub Actions
@@ -56,8 +57,8 @@ Add these GitHub Secrets:
 
 ```bash
 sudo -u videorecap -i
-git clone https://github.com/YOUR_USER/YOUR_REPO.git ~/video-recap-agent
-cd ~/video-recap-agent/video_recap_agent
+git clone https://github.com/hallucinotai/videorecap.git ~/videorecap
+cd ~/videorecap
 ```
 
 ## Step 5: Create Production Environment File
@@ -80,7 +81,7 @@ Fill in all values marked with `CHANGE_ME`:
 sudo apt update && sudo apt install -y nginx
 
 # Copy the config
-sudo cp ~/video-recap-agent/video_recap_agent/nginx/videorecap.conf \
+sudo cp ~/videorecap/nginx/videorecap.conf \
      /etc/nginx/sites-available/videorecap
 
 # Enable it
@@ -102,7 +103,7 @@ so both can coexist on port 80.
 ## Step 7: First Deploy
 
 ```bash
-cd ~/video-recap-agent/video_recap_agent
+cd ~/videorecap
 
 # Build and start all services
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
@@ -144,8 +145,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build fr
 ## CI/CD: Automatic Deployments
 
 After the initial setup, every push to `main` that changes files in
-`video_recap_agent/` will automatically trigger the GitHub Actions
-workflow (`.github/workflows/deploy.yml`) which:
+`backend/`, `frontend/`, or `docker-compose*.yml` will automatically
+trigger the GitHub Actions workflow (`.github/workflows/deploy.yml`) which:
 
 1. SSHs into your VPS
 2. Pulls the latest code
