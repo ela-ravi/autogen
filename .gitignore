@@ -56,7 +56,7 @@ htmlcov/
 *.pickle
 *.ckpt
 *.safetensors
-models/
+/models/
 checkpoints/
 
 # Whisper Model Cache
