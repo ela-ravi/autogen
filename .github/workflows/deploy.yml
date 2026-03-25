@@ -1,0 +1,49 @@
+name: Deploy Video Recap Agent
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'video_recap_agent/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 30m
+          script: |
+            set -e
+
+            echo "=== Pulling latest code ==="
+            cd ~/video-recap-agent
+            git pull origin main
+
+            echo "=== Building containers ==="
+            cd video_recap_agent
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml build
+
+            echo "=== Starting services ==="
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+            echo "=== Waiting for backend to be ready ==="
+            sleep 10
+
+            echo "=== Running database migrations ==="
+            docker compose exec -T backend alembic upgrade head || echo "Migration skipped (may not have new migrations)"
+
+            echo "=== Cleaning up old images ==="
+            docker image prune -f
+
+            echo "=== Deployment complete ==="
+            docker compose ps
