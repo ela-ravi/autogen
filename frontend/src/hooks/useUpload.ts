@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import Cookies from "js-cookie";
 import type { UploadResponse } from "@/lib/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export function useUpload() {
   const [uploading, setUploading] = useState(false);
