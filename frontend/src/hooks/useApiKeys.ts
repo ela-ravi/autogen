@@ -29,5 +29,10 @@ export function useApiKeys() {
     await fetchKeys();
   }, [fetchKeys]);
 
-  return { keys, loading, fetchKeys, createKey, revokeKey };
+  const deleteKey = useCallback(async (id: string) => {
+    await api.delete(`/api-keys/${id}/permanent`);
+    await fetchKeys();
+  }, [fetchKeys]);
+
+  return { keys, loading, fetchKeys, createKey, revokeKey, deleteKey };
 }

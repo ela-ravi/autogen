@@ -41,8 +41,21 @@ export default function UploadPage() {
       });
       toast.success("Job created! Processing started.");
       router.push(`/jobs/${data.id}`);
-    } catch {
-      toast.error("Failed to create job");
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to create job";
+      if (detail.toLowerCase().includes("api key")) {
+        toast.error(detail, {
+          action: {
+            label: "Go to Settings",
+            onClick: () => router.push("/settings"),
+          },
+          duration: 8000,
+        });
+      } else {
+        toast.error(detail);
+      }
     }
   };
 

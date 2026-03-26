@@ -3,11 +3,6 @@ name: Deploy Video Recap Agent
 on:
   push:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'docker-compose*.yml'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 jobs:
@@ -41,7 +36,7 @@ jobs:
             sleep 10
 
             echo "=== Running database migrations ==="
-            docker compose exec -T backend alembic upgrade head || echo "Migration skipped (may not have new migrations)"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T -e PYTHONPATH=/app backend alembic upgrade head || echo "Migration skipped (may not have new migrations)"
 
             echo "=== Cleaning up old images ==="
             docker image prune -f
