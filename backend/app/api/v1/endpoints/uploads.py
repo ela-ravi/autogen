@@ -46,3 +46,15 @@ async def upload_video(
         filename=file.filename,
         size=size,
     )
+
+
+@router.delete("/{s3_key:path}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_upload(
+    s3_key: str,
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    if not s3_key.startswith(f"uploads/{current_user.id}/"):
+        raise HTTPException(status_code=403, detail="Not your upload")
+    if not storage.file_exists(s3_key):
+        raise HTTPException(status_code=404, detail="File not found")
+    storage.delete_file(s3_key)

@@ -58,7 +58,14 @@ export default function UploadPage() {
     }
   };
 
-  const handleRemoveFile = () => {
+  const handleRemoveFile = async () => {
+    if (uploadResult?.s3_key) {
+      try {
+        await api.delete(`/uploads/${uploadResult.s3_key}`);
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
     setFileName(null);
     setFileSize(0);
     setUploadResult(null);
