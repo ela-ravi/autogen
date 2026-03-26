@@ -126,38 +126,61 @@ REJECT if:
 ✗ Clips out of chronological order
 """
     
-    print("Analyzing transcript with AI...")
-    response = client.chat.completions.create(
-        model=os.getenv("model", "gpt-4o"),
-        messages=[
-            {"role": "system", "content": "You are a professional video editor skilled at creating engaging recaps from noisy transcriptions. You use a TWO-PASS approach: (1) Select dialogue clips first, (2) Fill remaining duration with atmospheric/transition clips from non-dialogue segments. You ALWAYS ensure clips total EXACTLY the target duration by using both dialogue and atmospheric moments. You maintain chronological order and create smooth, natural narrations that account for all clip types. Always respond with valid JSON."},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=2500
-    )
+    system_msg = "You are a professional video editor skilled at creating engaging recaps from noisy transcriptions. You use a TWO-PASS approach: (1) Select dialogue clips first, (2) Fill remaining duration with atmospheric/transition clips from non-dialogue segments. You ALWAYS ensure clips total EXACTLY the target duration by using both dialogue and atmospheric moments. You maintain chronological order and create smooth, natural narrations that account for all clip types. Always respond with valid JSON."
+    messages = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": prompt}
+    ]
     
-    result_text = response.choices[0].message.content if response.choices else None
+    tolerance = 2.0
+    recap_data = None
+    actual_duration = 0
+    max_attempts = 3
     
-    # Parse JSON from response
-    if result_text.startswith("```"):
-        result_text = result_text.split("```")[1]
-        if result_text.startswith("json"):
-            result_text = result_text[4:]
+    for attempt in range(1, max_attempts + 1):
+        print(f"Analyzing transcript with AI (attempt {attempt}/{max_attempts})...")
+        response = client.chat.completions.create(
+            model=os.getenv("model", "gpt-4o"),
+            messages=messages,
+            max_tokens=2500
+        )
+        
+        result_text = response.choices[0].message.content if response.choices else None
+        
+        if result_text.startswith("```"):
+            result_text = result_text.split("```")[1]
+            if result_text.startswith("json"):
+                result_text = result_text[4:]
+        
+        recap_data = json.loads(result_text.strip())
+        clip_timings = recap_data.get('clip_timings', [])
+        actual_duration = sum(clip['end'] - clip['start'] for clip in clip_timings)
+        
+        if abs(actual_duration - target_duration) <= tolerance:
+            print(f"   Duration OK: {actual_duration:.1f}s (target {target_duration}s)")
+            break
+        
+        print(f"   Duration mismatch: {actual_duration:.1f}s vs target {target_duration}s — retrying...")
+        messages.append({"role": "assistant", "content": response.choices[0].message.content})
+        messages.append({"role": "user", "content": (
+            f"The clips you selected total {actual_duration:.1f} seconds, but the target is "
+            f"EXACTLY {target_duration} seconds. You are off by "
+            f"{target_duration - actual_duration:.1f}s. Please add more clips to fill the gap. "
+            f"Return the complete corrected JSON with all clips."
+        )})
     
-    recap_data = json.loads(result_text.strip())
-    
-    # Validate duration
-    clip_timings = recap_data.get('clip_timings', [])
-    actual_duration = sum(clip['end'] - clip['start'] for clip in clip_timings)
-    tolerance = 1.0  # Allow 1 second tolerance
-    
-    if abs(actual_duration - target_duration) > tolerance:
-        print(f"\n⚠️  WARNING: Duration mismatch detected!")
-        print(f"   Target: {target_duration}s")
-        print(f"   Actual: {actual_duration:.2f}s")
-        print(f"   Difference: {abs(actual_duration - target_duration):.2f}s")
-        print(f"\n   This may result in unexpected video/audio sync issues.")
-        print(f"   Consider regenerating with a different duration target.")
+    if abs(actual_duration - target_duration) > tolerance and actual_duration > 0:
+        print(f"   Scaling clips: {actual_duration:.1f}s -> {target_duration}s")
+        scale = target_duration / actual_duration
+        clip_timings = recap_data.get('clip_timings', [])
+        for clip in clip_timings:
+            mid = (clip['start'] + clip['end']) / 2
+            half = ((clip['end'] - clip['start']) * scale) / 2
+            clip['start'] = max(0, round(mid - half, 1))
+            clip['end'] = round(mid + half, 1)
+        recap_data['clip_timings'] = clip_timings
+        actual_duration = sum(c['end'] - c['start'] for c in clip_timings)
+        print(f"   Scaled duration: {actual_duration:.1f}s")
     
     # Sort clips by start time to ensure chronological order
     recap_data['clip_timings'] = sorted(clip_timings, key=lambda x: x['start'])
