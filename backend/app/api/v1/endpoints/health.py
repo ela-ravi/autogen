@@ -49,3 +49,12 @@ async def health_check():
         "status": "healthy" if all_healthy else "degraded",
         "services": services,
     }
+
+
+@router.get("/meta")
+async def app_meta():
+    return {
+        "version": settings.APP_VERSION,
+        "enable_user_api_keys": settings.ENABLE_USER_API_KEYS,
+        "api_key_restricted_to_emails": len(settings.API_KEY_ALLOWED_EMAILS) > 0,
+    }

@@ -128,7 +128,7 @@ REJECT if:
     
     print("Analyzing transcript with AI...")
     response = client.chat.completions.create(
-        model=os.getenv("model", "gpt-4"),
+        model=os.getenv("model", "gpt-4o"),
         messages=[
             {"role": "system", "content": "You are a professional video editor skilled at creating engaging recaps from noisy transcriptions. You use a TWO-PASS approach: (1) Select dialogue clips first, (2) Fill remaining duration with atmospheric/transition clips from non-dialogue segments. You ALWAYS ensure clips total EXACTLY the target duration by using both dialogue and atmospheric moments. You maintain chronological order and create smooth, natural narrations that account for all clip types. Always respond with valid JSON."},
             {"role": "user", "content": prompt}

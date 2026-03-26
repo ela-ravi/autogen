@@ -25,4 +25,7 @@ COPY backend/ .
 # Copy original CLI modules
 COPY modules/ /app/modules/
 
+ARG APP_VERSION="dev"
+ENV APP_VERSION=$APP_VERSION
+
 CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2", "-Q", "celery,processing,maintenance"]

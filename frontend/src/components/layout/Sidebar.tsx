@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -23,10 +24,18 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [version, setVersion] = useState<string>("");
+
+  useEffect(() => {
+    const check = () => setVersion(window.__meta__?.version || "");
+    check();
+    const t = setTimeout(check, 2000);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
-    <nav className="w-56 border-r bg-secondary/30 p-4">
-      <ul className="space-y-1">
+    <nav className="flex w-56 flex-col border-r bg-secondary/30 p-4">
+      <ul className="flex-1 space-y-1">
         {navItems.map((item) => (
           <li key={item.href}>
             <Link
@@ -44,6 +53,9 @@ export function Sidebar() {
           </li>
         ))}
       </ul>
+      {version && (
+        <p className="px-3 text-xs text-muted-foreground/60">{version}</p>
+      )}
     </nav>
   );
 }

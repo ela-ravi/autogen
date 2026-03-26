@@ -26,8 +26,13 @@ jobs:
             cd ~/videorecap
             git pull origin main
 
+            echo "=== Computing build version ==="
+            BUILD_NUM=$(git rev-list --count HEAD)
+            APP_VERSION="build-${BUILD_NUM}"
+            echo "Version: ${APP_VERSION}"
+
             echo "=== Building containers ==="
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml build
+            APP_VERSION=${APP_VERSION} docker compose -f docker-compose.yml -f docker-compose.prod.yml build --build-arg APP_VERSION=${APP_VERSION}
 
             echo "=== Starting services ==="
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d

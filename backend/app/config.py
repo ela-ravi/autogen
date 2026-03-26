@@ -5,6 +5,7 @@ from typing import List
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "Video Recap Agent"
+    APP_VERSION: str = "dev"
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
 
