@@ -24,6 +24,7 @@ jobs:
 
             echo "=== Pulling latest code ==="
             cd ~/videorecap
+            git reset --hard HEAD
             git pull origin main
 
             echo "=== Computing build version ==="

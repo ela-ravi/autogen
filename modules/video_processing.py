@@ -140,7 +140,7 @@ REJECT if:
     for attempt in range(1, max_attempts + 1):
         print(f"Analyzing transcript with AI (attempt {attempt}/{max_attempts})...")
         response = client.chat.completions.create(
-            model=os.getenv("model", "gpt-4o"),
+            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
             messages=messages,
             max_tokens=2500
         )

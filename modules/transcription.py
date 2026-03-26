@@ -145,7 +145,7 @@ def translate_transcription(input_file, source_lang, target_lang, output_dir="ou
             print(f"Translating line {i}/{len(lines)}...", end='\r')
             
             response = client.chat.completions.create(
-                model=os.getenv("model", "gpt-4o"),
+                model=os.getenv("OPENAI_MODEL", "gpt-4o"),
                 messages=[
                     {"role": "system", "content": "You are a professional translator."},
                     {"role": "user", "content": f"Translate this {source_lang} text to {target_lang}: {text}"}

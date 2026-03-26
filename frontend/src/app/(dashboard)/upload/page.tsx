@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileVideo, CheckCircle2 } from "lucide-react";
+import { FileVideo, CheckCircle2, X } from "lucide-react";
 import { DropZone } from "@/components/upload/DropZone";
 import { UploadForm } from "@/components/upload/UploadForm";
 import { useUpload } from "@/hooks/useUpload";
@@ -11,26 +11,62 @@ import { formatFileSize } from "@/lib/utils";
 import api from "@/lib/api";
 import type { Job, JobConfig, UploadResponse } from "@/lib/types";
 
+const STORAGE_KEY = "videorecap_pending_upload";
+
+interface PersistedUpload {
+  fileName: string;
+  fileSize: number;
+  result: UploadResponse;
+}
+
 export default function UploadPage() {
-  const [file, setFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileSize, setFileSize] = useState<number>(0);
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
   const { uploading, uploadProgress, uploadVideo } = useUpload();
   const router = useRouter();
 
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const data: PersistedUpload = JSON.parse(saved);
+        setFileName(data.fileName);
+        setFileSize(data.fileSize);
+        setUploadResult(data.result);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   const handleFileSelect = async (f: File) => {
-    setFile(f);
+    setFileName(f.name);
+    setFileSize(f.size);
+    setUploadResult(null);
     try {
       const result = await uploadVideo(f);
       setUploadResult(result);
+      sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ fileName: f.name, fileSize: f.size, result } satisfies PersistedUpload)
+      );
       toast.success("Video uploaded successfully");
     } catch {
       toast.error("Upload failed");
-      setFile(null);
+      setFileName(null);
+      setUploadResult(null);
+      sessionStorage.removeItem(STORAGE_KEY);
     }
   };
 
+  const handleRemoveFile = () => {
+    setFileName(null);
+    setFileSize(0);
+    setUploadResult(null);
+    sessionStorage.removeItem(STORAGE_KEY);
+  };
+
   const handleSubmit = async (config: JobConfig) => {
-    if (!uploadResult || !file) return;
+    if (!uploadResult || !fileName) return;
     try {
       const { data } = await api.post<Job>("/jobs", {
         upload_id: uploadResult.upload_id,
@@ -39,6 +75,7 @@ export default function UploadPage() {
         file_size_bytes: uploadResult.size,
         config,
       });
+      sessionStorage.removeItem(STORAGE_KEY);
       toast.success("Job created! Processing started.");
       router.push(`/jobs/${data.id}`);
     } catch (err: unknown) {
@@ -59,28 +96,32 @@ export default function UploadPage() {
     }
   };
 
+  const hasUpload = !!fileName;
+
   return (
     <div>
       <h2 className="mb-6 text-2xl font-bold">Upload Video</h2>
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
-          <DropZone onFileSelect={handleFileSelect} disabled={uploading} />
-          {file && (
+          {!hasUpload && (
+            <DropZone onFileSelect={handleFileSelect} disabled={uploading} />
+          )}
+          {hasUpload && (
             <div
-              className={`mt-4 rounded-lg border p-4 transition-colors ${
+              className={`rounded-lg border p-4 transition-colors ${
                 uploadResult && !uploading
-                  ? "border-green-300 bg-green-50"
+                  ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950/30"
                   : uploading
-                    ? "border-blue-300 bg-blue-50"
+                    ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/30"
                     : "border-border"
               }`}
             >
               <div className="flex items-center gap-3">
                 <FileVideo className="h-6 w-6 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-semibold">{file.name}</p>
+                  <p className="truncate text-base font-semibold">{fileName}</p>
                   <p className="text-sm text-muted-foreground">
-                    {formatFileSize(file.size)}
+                    {formatFileSize(fileSize)}
                   </p>
                 </div>
                 {uploadResult && !uploading && (
@@ -88,6 +129,16 @@ export default function UploadPage() {
                     <CheckCircle2 className="h-5 w-5" />
                     Uploaded
                   </span>
+                )}
+                {!uploading && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveFile}
+                    title="Remove file"
+                    className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 )}
               </div>
               {uploading && (
