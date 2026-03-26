@@ -135,11 +135,17 @@ def process_recap_job(self, job_id: str, resume_from_step: int = 0):
         logger.info(f"Pipeline completed for job {job_id}")
     except Exception as e:
         logger.exception(f"Pipeline failed for job {job_id}: {e}")
-        import json
-        _redis_client.publish(
-            f"job:{job_id}:progress",
-            json.dumps({"type": "failed", "error": str(e)}),
-        )
+        # Check if the job was intentionally stopped before publishing failure
+        with SyncSession() as session:
+            current_status = session.execute(
+                select(RecapJob.status).where(RecapJob.id == job_id)
+            ).scalar_one_or_none()
+        if current_status != "stopped":
+            import json
+            _redis_client.publish(
+                f"job:{job_id}:progress",
+                json.dumps({"type": "failed", "error": str(e)}),
+            )
     finally:
         if user_openai_key:
             if original_key is not None:

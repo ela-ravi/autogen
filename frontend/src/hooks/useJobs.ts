@@ -49,5 +49,10 @@ export function useJobs() {
     return data;
   }, []);
 
-  return { jobs, total, loading, fetchJobs, getJob, deleteJob, getDownloadUrl, resumeJob };
+  const stopJob = useCallback(async (id: string): Promise<Job> => {
+    const { data } = await api.post<Job>(`/jobs/${id}/stop`);
+    return data;
+  }, []);
+
+  return { jobs, total, loading, fetchJobs, getJob, deleteJob, getDownloadUrl, resumeJob, stopJob };
 }

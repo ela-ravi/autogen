@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useJobs } from "@/hooks/useJobs";
@@ -8,7 +8,7 @@ import { useJobProgress } from "@/hooks/useJobProgress";
 import { formatDate, formatFileSize, statusColor } from "@/lib/utils";
 import type { Job } from "@/lib/types";
 import api from "@/lib/api";
-import { Download, Trash2, RotateCcw } from "lucide-react";
+import { Download, Trash2, RotateCcw, Square } from "lucide-react";
 
 const STEP_NAMES = [
   "",
@@ -25,7 +25,10 @@ export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<Job | null>(null);
   const [resuming, setResuming] = useState(false);
-  const { getJob, deleteJob, resumeJob } = useJobs();
+  const [stopping, setStopping] = useState(false);
+  const [activityLog, setActivityLog] = useState<{ time: string; message: string; step: number }[]>([]);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const { getJob, deleteJob, resumeJob, stopJob } = useJobs();
   const progress = useJobProgress(
     job?.status === "processing" || job?.status === "pending" ? id : null
   );
@@ -41,10 +44,22 @@ export default function JobDetailPage() {
   }, [fetchJob]);
 
   useEffect(() => {
-    if (progress?.type === "completed" || progress?.type === "failed") {
+    if (progress?.type === "completed" || progress?.type === "failed" || progress?.type === "stopped") {
       fetchJob();
     }
+    if (progress?.message) {
+      const msg = progress.message;
+      const step = progress.step ?? 0;
+      setActivityLog((prev) => {
+        if (prev.length > 0 && prev[prev.length - 1].message === msg) return prev;
+        return [...prev, { time: new Date().toLocaleTimeString(), message: msg, step }];
+      });
+    }
   }, [progress, fetchJob]);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activityLog]);
 
   const handleDownload = async () => {
     try {
@@ -89,6 +104,19 @@ export default function JobDetailPage() {
     }
   };
 
+  const handleStop = async () => {
+    setStopping(true);
+    try {
+      const updated = await stopJob(id);
+      setJob(updated);
+      toast.success("Job stopped. You can resume it later.");
+    } catch {
+      toast.error("Failed to stop job");
+    } finally {
+      setStopping(false);
+    }
+  };
+
   if (!job) {
     return <div className="text-muted-foreground">Loading...</div>;
   }
@@ -102,7 +130,17 @@ export default function JobDetailPage() {
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-2xl font-bold">{job.original_filename}</h2>
         <div className="flex gap-2">
-          {job.status === "failed" && (
+          {(job.status === "processing" || job.status === "pending") && (
+            <button
+              onClick={handleStop}
+              disabled={stopping}
+              className="flex items-center gap-1 rounded-md bg-orange-600 px-4 py-2 text-sm text-white hover:bg-orange-700 disabled:opacity-50"
+            >
+              <Square className="h-3.5 w-3.5 fill-current" />
+              {stopping ? "Stopping..." : "Stop"}
+            </button>
+          )}
+          {(job.status === "failed" || job.status === "stopped") && (
             <button
               onClick={handleResume}
               disabled={resuming}
@@ -184,16 +222,16 @@ export default function JobDetailPage() {
           </div>
         )}
 
-        {job.status === "failed" && (
+        {(job.status === "failed" || job.status === "stopped") && (
           <div>
-            {job.error_message && (
+            {job.status === "failed" && job.error_message && (
               <div className="rounded-md bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-400">
                 {job.error_message}
               </div>
             )}
-            <div className="mt-4">
+            <div className={job.error_message && job.status === "failed" ? "mt-4" : ""}>
               <p className="mb-2 text-sm text-muted-foreground">
-                Failed at step {job.current_step} of 7: {STEP_NAMES[job.current_step] || "Unknown"}
+                {job.status === "stopped" ? "Stopped" : "Failed"} at step {job.current_step} of 7: {STEP_NAMES[job.current_step] || "Unknown"}
               </p>
               <div className="grid grid-cols-7 gap-1">
                 {[1, 2, 3, 4, 5, 6, 7].map((step) => (
@@ -203,7 +241,7 @@ export default function JobDetailPage() {
                         step < job.current_step
                           ? "bg-green-500"
                           : step === job.current_step
-                          ? "bg-red-500"
+                          ? job.status === "stopped" ? "bg-orange-500" : "bg-red-500"
                           : "bg-gray-200"
                       }`}
                     />
@@ -217,6 +255,23 @@ export default function JobDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Activity Log */}
+      {activityLog.length > 0 && (
+        <div className="mb-6 rounded-lg border p-6">
+          <h3 className="mb-3 text-sm font-semibold">Activity Log</h3>
+          <div className="max-h-40 overflow-y-auto rounded-md bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+            {activityLog.map((entry, i) => (
+              <div key={i} className="flex gap-3 py-0.5">
+                <span className="shrink-0 text-muted-foreground">{entry.time}</span>
+                <span className="shrink-0 text-blue-500">[Step {entry.step}]</span>
+                <span>{entry.message}</span>
+              </div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+        </div>
+      )}
 
       {/* Details */}
       <div className="rounded-lg border p-6">

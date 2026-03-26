@@ -4,6 +4,8 @@ import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
+
 from app.processing.audio_processing import generate_tts_service, merge_audio_video_service
 from app.processing.progress import ProgressReporter
 from app.processing.transcription import transcribe_video_service, translate_transcription_service
@@ -213,8 +215,7 @@ class RecapPipeline:
                 self.progress.report(5, "Extracting video clips...", 0.0)
                 result = extract_clips_service(
                     local_video_path, recap_data_file, working_dir,
-                    target_duration=actual_audio_duration,
-                    pad_with_black=True,
+                    target_duration=actual_audio_duration + 5,
                     progress_callback=self._progress_callback,
                 )
                 recap_video_file = result["recap_video_file"]
@@ -269,11 +270,22 @@ class RecapPipeline:
 
         except Exception as e:
             logger.exception(f"Pipeline failed for job {self.job_id}")
-            self._update_job(
-                status="failed",
-                error_message=str(e),
-                intermediate_keys=intermediate_keys,
-            )
+            # Don't overwrite "stopped" status — the stop endpoint already set it
+            from app.workers.tasks import SyncSession
+            from app.models.job import RecapJob
+            with SyncSession() as session:
+                current = session.execute(
+                    select(RecapJob.status).where(RecapJob.id == self.job_id)
+                ).scalar_one_or_none()
+            if current != "stopped":
+                self._update_job(
+                    status="failed",
+                    error_message=str(e),
+                    intermediate_keys=intermediate_keys,
+                )
+            else:
+                self._update_job(intermediate_keys=intermediate_keys)
+                logger.info(f"Job {self.job_id} was stopped by user, not marking as failed")
             raise
         finally:
             if self.working_dir and os.path.exists(self.working_dir):

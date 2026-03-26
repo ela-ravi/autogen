@@ -9,7 +9,7 @@ Contains functions for:
 
 import os
 import json
-from moviepy.editor import VideoFileClip, concatenate_videoclips, ColorClip
+from moviepy.editor import VideoFileClip, concatenate_videoclips
 
 # Get the directory where this file is located
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -212,16 +212,15 @@ REJECT if:
     return recap_data_file
 
 
-def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, output_dir="output/videos", pad_with_black=False):
+def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, output_dir="output/videos"):
     """
     Step 4: Extract video clips and merge them
     
     Args:
         video_path: Path to original video
         recap_data_file: Path to recap_data.json
-        target_duration: Target duration in seconds
+        target_duration: Target duration in seconds (should include overshoot buffer)
         output_dir: Directory to save output video
-        pad_with_black: Whether to pad with black frames if video is shorter (default: False)
     
     Returns:
         Path to merged video
@@ -270,26 +269,19 @@ def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, out
     print("Combining clips...")
     final_clip = concatenate_videoclips(clips, method="compose")
     
-    # Ensure video is at least as long as target_duration (audio duration).
-    # If shorter, pad with black frames. If longer, trim to match.
+    # Trim video to target duration. The caller requests clips with an
+    # overshoot buffer (+5s) so the video should always be longer than the
+    # audio narration — just trim the excess.
     current_duration = final_clip.duration
     print(f"Current duration: {current_duration:.2f}s")
-    print(f"Target duration (audio): {target_duration}s")
+    print(f"Target duration: {target_duration}s")
     
-    if current_duration < target_duration - 0.1:
-        gap = target_duration - current_duration
-        print(f"Video shorter than audio — padding with {gap:.2f}s of black frames...")
-        black_clip = ColorClip(
-            size=final_clip.size,
-            color=(0, 0, 0),
-            duration=gap
-        )
-        final_clip = concatenate_videoclips([final_clip, black_clip], method="compose")
-        print(f"✅ Padded to {final_clip.duration:.2f}s")
-    elif current_duration > target_duration + 0.1:
+    if current_duration > target_duration + 0.1:
         print(f"Trimming video from {current_duration:.2f}s to {target_duration:.1f}s...")
         final_clip = final_clip.subclip(0, target_duration)
         print(f"✅ Trimmed to {final_clip.duration:.2f}s")
+    elif current_duration < target_duration - 0.1:
+        print(f"⚠️  Video ({current_duration:.2f}s) is shorter than target ({target_duration}s) — proceeding as-is")
     else:
         print(f"✅ Duration matches target: {current_duration:.2f}s")
     

@@ -105,18 +105,52 @@ async def download_job(
     )
 
 
+@router.post("/{job_id}/stop", response_model=JobResponse)
+async def stop_job(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Stop a running job. It can be resumed later."""
+    job = await job_service.get_job(db, job_id, current_user.id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in ("pending", "processing"):
+        raise HTTPException(status_code=400, detail="Job is not running")
+
+    if job.celery_task_id:
+        from app.workers.celery_app import celery_app
+        celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
+
+    job.status = "stopped"
+    job.error_message = None
+    await db.commit()
+    await db.refresh(job)
+
+    import json
+    from app.config import settings
+    import redis as _redis
+    rc = _redis.from_url(settings.REDIS_URL)
+    rc.publish(
+        f"job:{job_id}:progress",
+        json.dumps({"type": "stopped", "step": job.current_step, "progress_pct": job.progress_pct}),
+    )
+
+    return job
+
+
 @router.post("/{job_id}/resume", response_model=JobResponse)
 async def resume_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_or_api_key),
 ):
-    """Resume a failed job from the step where it failed."""
+    """Resume a failed or stopped job from the step where it left off."""
     job = await job_service.get_job(db, job_id, current_user.id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status != "failed":
-        raise HTTPException(status_code=400, detail="Only failed jobs can be resumed")
+    if job.status not in ("failed", "stopped"):
+        raise HTTPException(status_code=400, detail="Only failed or stopped jobs can be resumed")
 
     resume_step = job.current_step or 1
 

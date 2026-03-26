@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.usage import UsageRecord
 
 TIER_QUOTAS = {
@@ -15,6 +16,9 @@ TIER_QUOTAS = {
 
 async def check_quota(db: AsyncSession, user_id: str, tier: str):
     """Raise 429 if user has exceeded their monthly recap quota."""
+    if not settings.ENABLE_BILLING:
+        return
+
     quota = TIER_QUOTAS.get(tier, 3)
     if quota == -1:
         return  # Unlimited

@@ -57,6 +57,9 @@ async def create_checkout_session(
 
 
 async def get_usage_summary(db: AsyncSession, user_id: str, tier: str) -> dict:
+    if not settings.ENABLE_BILLING:
+        return {"tier": tier, "used": 0, "limit": -1, "remaining": -1}
+
     today = date.today()
     period_start = today.replace(day=1)
 

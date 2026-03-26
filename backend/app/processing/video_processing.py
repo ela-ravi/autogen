@@ -47,7 +47,6 @@ def extract_clips_service(
     recap_data_file: str,
     working_dir: str,
     target_duration: float = 30,
-    pad_with_black: bool = True,
     progress_callback: Callable | None = None,
 ) -> dict:
     """Wrap modules.video_processing.extract_and_merge_clips."""
@@ -61,7 +60,6 @@ def extract_clips_service(
             recap_data_file,
             target_duration=target_duration,
             output_dir="output/videos",
-            pad_with_black=pad_with_black,
         )
         if progress_callback:
             progress_callback(step=5, message="Clips extracted and merged")

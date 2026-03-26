@@ -91,7 +91,7 @@ export interface TierInfo {
 }
 
 export interface ProgressEvent {
-  type: "progress" | "completed" | "failed";
+  type: "progress" | "completed" | "failed" | "stopped";
   step?: number;
   step_name?: string;
   progress_pct?: number;
