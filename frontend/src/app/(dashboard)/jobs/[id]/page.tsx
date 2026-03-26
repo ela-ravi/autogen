@@ -7,23 +7,25 @@ import { useJobs } from "@/hooks/useJobs";
 import { useJobProgress } from "@/hooks/useJobProgress";
 import { formatDate, formatFileSize, statusColor } from "@/lib/utils";
 import type { Job } from "@/lib/types";
-import { Download, Trash2 } from "lucide-react";
+import api from "@/lib/api";
+import { Download, Trash2, RotateCcw } from "lucide-react";
 
 const STEP_NAMES = [
   "",
   "Transcribing video",
   "Translating transcription",
-  "Generating recap suggestions",
+  "Generating recap",
+  "Generating narration",
   "Extracting clips",
   "Removing audio",
-  "Generating narration",
   "Merging final video",
 ];
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<Job | null>(null);
-  const { getJob, deleteJob, getDownloadUrl } = useJobs();
+  const [resuming, setResuming] = useState(false);
+  const { getJob, deleteJob, resumeJob } = useJobs();
   const progress = useJobProgress(
     job?.status === "processing" || job?.status === "pending" ? id : null
   );
@@ -38,7 +40,6 @@ export default function JobDetailPage() {
     fetchJob();
   }, [fetchJob]);
 
-  // Refresh job when progress indicates completion
   useEffect(() => {
     if (progress?.type === "completed" || progress?.type === "failed") {
       fetchJob();
@@ -47,8 +48,16 @@ export default function JobDetailPage() {
 
   const handleDownload = async () => {
     try {
-      const url = await getDownloadUrl(id);
-      window.open(url, "_blank");
+      const response = await api.get(`/jobs/${id}/download`, { responseType: "blob" });
+      const disposition = response.headers["content-disposition"] || "";
+      const match = disposition.match(/filename="?(.+?)"?$/);
+      const filename = match?.[1] || "recap_video.mp4";
+      const url = URL.createObjectURL(response.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch {
       toast.error("Download not available");
     }
@@ -65,6 +74,21 @@ export default function JobDetailPage() {
     }
   };
 
+  const handleResume = async () => {
+    setResuming(true);
+    try {
+      const updated = await resumeJob(id);
+      setJob(updated);
+      toast.success(
+        `Resuming from step ${updated.current_step}: ${STEP_NAMES[updated.current_step] || ""}`,
+      );
+    } catch {
+      toast.error("Failed to resume job");
+    } finally {
+      setResuming(false);
+    }
+  };
+
   if (!job) {
     return <div className="text-muted-foreground">Loading...</div>;
   }
@@ -78,6 +102,16 @@ export default function JobDetailPage() {
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-2xl font-bold">{job.original_filename}</h2>
         <div className="flex gap-2">
+          {job.status === "failed" && (
+            <button
+              onClick={handleResume}
+              disabled={resuming}
+              className="flex items-center gap-1 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              <RotateCcw className={`h-4 w-4 ${resuming ? "animate-spin" : ""}`} />
+              {resuming ? "Resuming..." : `Resume from Step ${job.current_step}`}
+            </button>
+          )}
           {job.status === "completed" && (
             <button
               onClick={handleDownload}
@@ -150,9 +184,36 @@ export default function JobDetailPage() {
           </div>
         )}
 
-        {job.status === "failed" && job.error_message && (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-800">
-            {job.error_message}
+        {job.status === "failed" && (
+          <div>
+            {job.error_message && (
+              <div className="rounded-md bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-400">
+                {job.error_message}
+              </div>
+            )}
+            <div className="mt-4">
+              <p className="mb-2 text-sm text-muted-foreground">
+                Failed at step {job.current_step} of 7: {STEP_NAMES[job.current_step] || "Unknown"}
+              </p>
+              <div className="grid grid-cols-7 gap-1">
+                {[1, 2, 3, 4, 5, 6, 7].map((step) => (
+                  <div key={step} className="text-center">
+                    <div
+                      className={`mx-auto mb-1 h-2 w-2 rounded-full ${
+                        step < job.current_step
+                          ? "bg-green-500"
+                          : step === job.current_step
+                          ? "bg-red-500"
+                          : "bg-gray-200"
+                      }`}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      {STEP_NAMES[step]?.split(" ")[0]}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

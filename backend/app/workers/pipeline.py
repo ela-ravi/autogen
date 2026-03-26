@@ -47,12 +47,31 @@ class RecapPipeline:
         if self.update_job_fn:
             self.update_job_fn(self.job_id, **kwargs)
 
-    def run(self):
+    def _upload_intermediate(self, keys_dict: dict, name: str, local_path: str):
+        if not os.path.exists(local_path):
+            return
+        s3_key = f"jobs/{self.job_id}/{name}/{os.path.basename(local_path)}"
+        with open(local_path, "rb") as f:
+            storage.upload_file(s3_key, f)
+        keys_dict[name] = s3_key
+        self._update_job(intermediate_keys=dict(keys_dict))
+
+    def _download_intermediate(self, keys_dict: dict, name: str, local_path: str) -> str | None:
+        """Download a previously saved intermediate artifact from S3."""
+        s3_key = keys_dict.get(name)
+        if not s3_key:
+            return None
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        storage.download_file(s3_key, local_path)
+        logger.info(f"Restored intermediate '{name}' from S3 → {local_path}")
+        return local_path
+
+    def run(self, resume_from_step: int = 0, existing_intermediate_keys: dict | None = None):
         working_dir = self._setup_working_dir()
-        intermediate_keys = {}
+        intermediate_keys = dict(existing_intermediate_keys or {})
 
         try:
-            # Download input video from S3
+            # Always download input video
             self._update_job(status="processing", current_step=0, current_step_name="Downloading video")
             self.progress.report(0, "Downloading video from storage...", 0.0)
             video_filename = os.path.basename(self.input_video_key)
@@ -65,86 +84,157 @@ class RecapPipeline:
             translate_to = self.config.get("translate_to")
             tts_model = self.config.get("tts_model", "tts-1")
             tts_voice = self.config.get("tts_voice", "nova")
-            pad_with_black = self.config.get("pad_with_black", False)
+
+            # --- Restore intermediates needed for resumption ---
+            transcription_file = None
+            active_transcription = None
+            recap_data_file = None
+            recap_text_file = os.path.join(working_dir, "output/transcriptions/recap_text.txt")
+            tts_audio_file = None
+            actual_audio_duration = None
+            recap_video_file = None
+            no_audio_video = None
+
+            if resume_from_step >= 2:
+                if "translation" in intermediate_keys:
+                    active_transcription = self._download_intermediate(
+                        intermediate_keys, "translation",
+                        os.path.join(working_dir, "output/transcriptions/translated.txt"))
+                if not active_transcription and "transcription" in intermediate_keys:
+                    active_transcription = self._download_intermediate(
+                        intermediate_keys, "transcription",
+                        os.path.join(working_dir, "output/transcriptions/transcription.txt"))
+                transcription_file = active_transcription
+
+            if resume_from_step >= 4 and "recap_data" in intermediate_keys:
+                recap_data_file = self._download_intermediate(
+                    intermediate_keys, "recap_data",
+                    os.path.join(working_dir, "output/transcriptions/recap_data.json"))
+                if recap_data_file:
+                    import json as _json
+                    with open(recap_data_file) as f:
+                        _recap = _json.load(f)
+                    with open(recap_text_file, "w") as f:
+                        f.write(_recap.get("recap_text", ""))
+
+            if resume_from_step >= 5 and "tts_audio" in intermediate_keys:
+                tts_audio_file = self._download_intermediate(
+                    intermediate_keys, "tts_audio",
+                    os.path.join(working_dir, "output/audio/recap_narration.mp3"))
+                if tts_audio_file:
+                    from pydub import AudioSegment
+                    audio_seg = AudioSegment.from_mp3(tts_audio_file)
+                    actual_audio_duration = len(audio_seg) / 1000.0
+                    logger.info(f"Restored TTS audio duration: {actual_audio_duration:.1f}s")
+
+            if resume_from_step >= 6 and "recap_video" in intermediate_keys:
+                recap_video_file = self._download_intermediate(
+                    intermediate_keys, "recap_video",
+                    os.path.join(working_dir, "output/videos/recap_video.mp4"))
+
+            if resume_from_step >= 7:
+                if recap_video_file:
+                    no_audio_video_path = os.path.join(working_dir, "output/videos/recap_video_no_audio.mp4")
+                    no_audio_video = no_audio_video_path
+
+            if resume_from_step > 0:
+                logger.info(f"Resuming job {self.job_id} from step {resume_from_step}")
 
             # Step 1: Transcribe
-            self._update_job(current_step=1, current_step_name="Transcribing video")
-            self.progress.report(1, "Starting transcription...", 0.0)
-            result = transcribe_video_service(
-                local_video_path, working_dir,
-                model_size=model_size, language=language,
-                progress_callback=self._progress_callback,
-            )
-            transcription_file = result["transcription_file"]
-            self._upload_intermediate(intermediate_keys, "transcription", transcription_file)
-            self.progress.report(1, "Transcription complete", 1.0)
-
-            # Step 2: Translate (optional)
-            active_transcription = transcription_file
-            if translate_to:
-                self._update_job(current_step=2, current_step_name="Translating")
-                self.progress.report(2, "Starting translation...", 0.0)
-                source_lang = language or "en"
-                result = translate_transcription_service(
-                    transcription_file, working_dir,
-                    source_lang=source_lang, target_lang=translate_to,
+            if resume_from_step <= 1:
+                self._update_job(current_step=1, current_step_name="Transcribing video")
+                self.progress.report(1, "Starting transcription...", 0.0)
+                result = transcribe_video_service(
+                    local_video_path, working_dir,
+                    model_size=model_size, language=language,
                     progress_callback=self._progress_callback,
                 )
-                active_transcription = result["translated_file"]
-                self._upload_intermediate(intermediate_keys, "translation", active_transcription)
-                self.progress.report(2, "Translation complete", 1.0)
+                transcription_file = result["transcription_file"]
+                active_transcription = transcription_file
+                self._upload_intermediate(intermediate_keys, "transcription", transcription_file)
+                self.progress.report(1, "Transcription complete", 1.0)
             else:
-                self.progress.report(2, "Translation skipped", 1.0)
+                self.progress.report(1, "Transcription (cached)", 1.0)
+
+            # Step 2: Translate (optional)
+            if resume_from_step <= 2:
+                if translate_to:
+                    self._update_job(current_step=2, current_step_name="Translating")
+                    self.progress.report(2, "Starting translation...", 0.0)
+                    source_lang = language or "en"
+                    result = translate_transcription_service(
+                        active_transcription, working_dir,
+                        source_lang=source_lang, target_lang=translate_to,
+                        progress_callback=self._progress_callback,
+                    )
+                    active_transcription = result["translated_file"]
+                    self._upload_intermediate(intermediate_keys, "translation", active_transcription)
+                    self.progress.report(2, "Translation complete", 1.0)
+                else:
+                    self.progress.report(2, "Translation skipped", 1.0)
+            else:
+                self.progress.report(2, "Translation (cached)", 1.0)
 
             # Step 3: Generate recap
-            self._update_job(current_step=3, current_step_name="Generating recap")
-            self.progress.report(3, "Generating recap suggestions...", 0.0)
-            result = generate_recap_service(
-                active_transcription, working_dir,
-                target_duration=target_duration,
-                progress_callback=self._progress_callback,
-            )
-            recap_data_file = result["recap_data_file"]
-            self._upload_intermediate(intermediate_keys, "recap_data", recap_data_file)
-            self.progress.report(3, "Recap generated", 1.0)
+            if resume_from_step <= 3:
+                self._update_job(current_step=3, current_step_name="Generating recap")
+                self.progress.report(3, "Generating recap suggestions...", 0.0)
+                result = generate_recap_service(
+                    active_transcription, working_dir,
+                    target_duration=target_duration,
+                    progress_callback=self._progress_callback,
+                )
+                recap_data_file = result["recap_data_file"]
+                self._upload_intermediate(intermediate_keys, "recap_data", recap_data_file)
+                self.progress.report(3, "Recap generated", 1.0)
+            else:
+                self.progress.report(3, "Recap (cached)", 1.0)
 
-            # Step 4: Generate TTS (moved before clip extraction to determine actual audio duration)
-            recap_text_file = os.path.join(working_dir, "output/transcriptions/recap_text.txt")
-            self._update_job(current_step=4, current_step_name="Generating narration")
-            self.progress.report(4, "Generating TTS narration...", 0.0)
-            result = generate_tts_service(
-                recap_text_file, working_dir,
-                target_duration=target_duration,
-                tts_model=tts_model, voice=tts_voice,
-                progress_callback=self._progress_callback,
-            )
-            tts_audio_file = result["tts_audio_file"]
-            actual_audio_duration = result["actual_audio_duration"]
-            self._upload_intermediate(intermediate_keys, "tts_audio", tts_audio_file)
-            self.progress.report(4, f"TTS narration ready ({actual_audio_duration:.1f}s)", 1.0)
+            # Step 4: Generate TTS
+            if resume_from_step <= 4:
+                self._update_job(current_step=4, current_step_name="Generating narration")
+                self.progress.report(4, "Generating TTS narration...", 0.0)
+                result = generate_tts_service(
+                    recap_text_file, working_dir,
+                    target_duration=target_duration,
+                    tts_model=tts_model, voice=tts_voice,
+                    progress_callback=self._progress_callback,
+                )
+                tts_audio_file = result["tts_audio_file"]
+                actual_audio_duration = result["actual_audio_duration"]
+                self._upload_intermediate(intermediate_keys, "tts_audio", tts_audio_file)
+                self.progress.report(4, f"TTS narration ready ({actual_audio_duration:.1f}s)", 1.0)
+            else:
+                self.progress.report(4, "TTS narration (cached)", 1.0)
 
-            # Step 5: Extract clips (use audio duration so video >= audio)
-            self._update_job(current_step=5, current_step_name="Extracting clips")
-            self.progress.report(5, "Extracting video clips...", 0.0)
-            result = extract_clips_service(
-                local_video_path, recap_data_file, working_dir,
-                target_duration=actual_audio_duration,
-                pad_with_black=True,
-                progress_callback=self._progress_callback,
-            )
-            recap_video_file = result["recap_video_file"]
-            self._upload_intermediate(intermediate_keys, "recap_video", recap_video_file)
-            self.progress.report(5, "Clips extracted", 1.0)
+            # Step 5: Extract clips
+            if resume_from_step <= 5:
+                self._update_job(current_step=5, current_step_name="Extracting clips")
+                self.progress.report(5, "Extracting video clips...", 0.0)
+                result = extract_clips_service(
+                    local_video_path, recap_data_file, working_dir,
+                    target_duration=actual_audio_duration,
+                    pad_with_black=True,
+                    progress_callback=self._progress_callback,
+                )
+                recap_video_file = result["recap_video_file"]
+                self._upload_intermediate(intermediate_keys, "recap_video", recap_video_file)
+                self.progress.report(5, "Clips extracted", 1.0)
+            else:
+                self.progress.report(5, "Clips (cached)", 1.0)
 
             # Step 6: Remove audio
-            self._update_job(current_step=6, current_step_name="Removing audio")
-            self.progress.report(6, "Removing original audio...", 0.0)
-            result = remove_audio_service(
-                recap_video_file, working_dir,
-                progress_callback=self._progress_callback,
-            )
-            no_audio_video = result["no_audio_video_file"]
-            self.progress.report(6, "Audio removed", 1.0)
+            if resume_from_step <= 6:
+                self._update_job(current_step=6, current_step_name="Removing audio")
+                self.progress.report(6, "Removing original audio...", 0.0)
+                result = remove_audio_service(
+                    recap_video_file, working_dir,
+                    progress_callback=self._progress_callback,
+                )
+                no_audio_video = result["no_audio_video_file"]
+                self.progress.report(6, "Audio removed", 1.0)
+            else:
+                self.progress.report(6, "Audio removal (cached)", 1.0)
 
             # Step 7: Merge audio + video
             self._update_job(current_step=7, current_step_name="Merging final video")
@@ -182,16 +272,9 @@ class RecapPipeline:
             self._update_job(
                 status="failed",
                 error_message=str(e),
+                intermediate_keys=intermediate_keys,
             )
             raise
         finally:
             if self.working_dir and os.path.exists(self.working_dir):
                 shutil.rmtree(self.working_dir, ignore_errors=True)
-
-    def _upload_intermediate(self, keys_dict: dict, name: str, local_path: str):
-        if not os.path.exists(local_path):
-            return
-        s3_key = f"jobs/{self.job_id}/{name}/{os.path.basename(local_path)}"
-        with open(local_path, "rb") as f:
-            storage.upload_file(s3_key, f)
-        keys_dict[name] = s3_key

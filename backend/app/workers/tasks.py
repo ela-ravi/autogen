@@ -72,15 +72,16 @@ def _resolve_openai_key(user_id: str) -> str | None:
 
 
 @celery_app.task(bind=True, name="app.workers.tasks.process_recap_job")
-def process_recap_job(self, job_id: str):
-    """Main task: runs the 7-step recap pipeline."""
-    logger.info(f"Starting recap pipeline for job {job_id}")
+def process_recap_job(self, job_id: str, resume_from_step: int = 0):
+    """Main task: runs the 7-step recap pipeline. Supports resumption from a given step."""
+    logger.info(f"Starting recap pipeline for job {job_id} (resume_from_step={resume_from_step})")
 
     # Mark job as started
     _update_job_sync(job_id, status="processing", started_at=datetime.now(timezone.utc))
 
-    # Load job config and resolve user's OpenAI key
+    # Load job config, intermediate keys, and resolve user's OpenAI key
     user_openai_key = None
+    existing_intermediate_keys = None
     with SyncSession() as session:
         job = session.execute(
             select(RecapJob).where(RecapJob.id == job_id)
@@ -90,6 +91,7 @@ def process_recap_job(self, job_id: str):
             return
         job_config = job.config
         input_video_key = job.input_video_key
+        existing_intermediate_keys = job.intermediate_keys or {}
         user_openai_key = _resolve_openai_key(job.user_id)
 
     # Store celery task ID
@@ -120,8 +122,10 @@ def process_recap_job(self, job_id: str):
     )
 
     try:
-        result = pipeline.run()
-        # Publish completion event
+        result = pipeline.run(
+            resume_from_step=resume_from_step,
+            existing_intermediate_keys=existing_intermediate_keys if resume_from_step > 0 else None,
+        )
         import json
         _redis_client.publish(
             f"job:{job_id}:progress",

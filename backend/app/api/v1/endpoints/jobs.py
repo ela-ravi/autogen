@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user_or_api_key, get_db
@@ -78,7 +79,7 @@ async def get_job(
     return job
 
 
-@router.get("/{job_id}/download", response_model=DownloadResponse)
+@router.get("/{job_id}/download")
 async def download_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
@@ -90,8 +91,45 @@ async def download_job(
     if job.status != "completed" or not job.output_video_key:
         raise HTTPException(status_code=400, detail="Job not ready for download")
 
-    url = storage.generate_presigned_url(job.output_video_key, expires_in=3600)
-    return DownloadResponse(download_url=url)
+    filename = job.original_filename.rsplit(".", 1)[0] + "_recap.mp4"
+
+    def stream():
+        body = storage.client.get_object(Bucket=storage.bucket, Key=job.output_video_key)["Body"]
+        for chunk in body.iter_chunks(chunk_size=1024 * 1024):
+            yield chunk
+
+    return StreamingResponse(
+        stream(),
+        media_type="video/mp4",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/{job_id}/resume", response_model=JobResponse)
+async def resume_job(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Resume a failed job from the step where it failed."""
+    job = await job_service.get_job(db, job_id, current_user.id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "failed":
+        raise HTTPException(status_code=400, detail="Only failed jobs can be resumed")
+
+    resume_step = job.current_step or 1
+
+    job.status = "processing"
+    job.error_message = None
+    job.progress_pct = 0.0
+    await db.commit()
+    await db.refresh(job)
+
+    from app.workers.tasks import process_recap_job
+    process_recap_job.delay(job.id, resume_from_step=resume_step)
+
+    return job
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
