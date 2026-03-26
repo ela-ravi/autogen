@@ -41,6 +41,10 @@ env/
 .ipynb_checkpoints
 *.ipynb
 
+# Celery
+celerybeat-schedule
+celerybeat-schedule.db
+
 # Testing
 .pytest_cache/
 .coverage
