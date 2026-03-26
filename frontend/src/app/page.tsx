@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Play, Zap, Shield, Globe } from "lucide-react";
+import { Play, Zap, Shield, Globe, Rocket } from "lucide-react";
 
 const features = [
   {
@@ -18,6 +19,7 @@ const features = [
     icon: Shield,
     title: "Developer API",
     description: "Integrate video recaps into your own apps with our REST API.",
+    requiresFlag: "enable_api_keys_menu" as const,
   },
   {
     icon: Globe,
@@ -49,6 +51,27 @@ const tiers = [
 ];
 
 export default function LandingPage() {
+  const [billingEnabled, setBillingEnabled] = useState(true);
+  const [disabledMessage, setDisabledMessage] = useState("");
+  const [apiKeysEnabled, setApiKeysEnabled] = useState(true);
+
+  useEffect(() => {
+    const check = () => {
+      const m = window.__meta__;
+      if (m) {
+        setBillingEnabled(m.enable_billing);
+        setDisabledMessage(m.billing_disabled_message || "");
+        setApiKeysEnabled(m.enable_api_keys_menu);
+        return true;
+      }
+      return false;
+    };
+    if (!check()) {
+      const t = setTimeout(check, 2000);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -103,13 +126,25 @@ export default function LandingPage() {
         <div className="container mx-auto px-6">
           <h3 className="mb-12 text-center text-3xl font-bold">How It Works</h3>
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-            {features.map((f) => (
-              <div key={f.title} className="rounded-lg border p-6">
-                <f.icon className="mb-4 h-8 w-8 text-blue-600" />
-                <h4 className="mb-2 text-lg font-semibold">{f.title}</h4>
-                <p className="text-sm text-muted-foreground">{f.description}</p>
-              </div>
-            ))}
+            {features.map((f) => {
+              const isDisabled = f.requiresFlag === "enable_api_keys_menu" && !apiKeysEnabled;
+              return (
+                <div key={f.title} className="relative rounded-lg border p-6">
+                  {isDisabled && (
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-lg bg-background/80 backdrop-blur-[2px]">
+                      <Rocket className="mb-2 h-6 w-6 text-blue-500" />
+                      <p className="text-sm font-semibold">Coming Soon</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Developer API</p>
+                    </div>
+                  )}
+                  <div className={isDisabled ? "opacity-30" : ""}>
+                    <f.icon className="mb-4 h-8 w-8 text-blue-600" />
+                    <h4 className="mb-2 text-lg font-semibold">{f.title}</h4>
+                    <p className="text-sm text-muted-foreground">{f.description}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -118,43 +153,56 @@ export default function LandingPage() {
       <section id="pricing" className="border-t py-20">
         <div className="container mx-auto px-6">
           <h3 className="mb-12 text-center text-3xl font-bold">Pricing</h3>
-          <div className="grid gap-8 md:grid-cols-3">
-            {tiers.map((tier) => (
-              <div
-                key={tier.name}
-                className={`rounded-lg border p-8 ${
-                  tier.popular ? "border-blue-600 ring-2 ring-blue-600" : ""
-                }`}
-              >
-                {tier.popular && (
-                  <span className="mb-4 inline-block rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
-                    Most Popular
-                  </span>
-                )}
-                <h4 className="text-2xl font-bold">{tier.name}</h4>
-                <p className="mt-2 text-3xl font-bold">
-                  {tier.price}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    /month
-                  </span>
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">{tier.limit}</p>
-                <ul className="mt-6 space-y-3">
-                  {tier.features.map((f) => (
-                    <li key={f} className="flex items-center text-sm">
-                      <span className="mr-2 text-green-600">✓</span>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href="/signup"
-                  className="mt-8 block w-full rounded-md border py-2 text-center text-sm hover:bg-secondary"
-                >
-                  Get Started
-                </Link>
+          <div className="relative">
+            {!billingEnabled && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/70 backdrop-blur-[2px]">
+                <div className="rounded-lg border bg-background p-8 text-center shadow-lg">
+                  <p className="text-lg font-medium text-muted-foreground">
+                    {disabledMessage}
+                  </p>
+                </div>
               </div>
-            ))}
+            )}
+            <div className={!billingEnabled ? "pointer-events-none select-none opacity-40" : ""}>
+              <div className="grid gap-8 md:grid-cols-3">
+                {tiers.map((tier) => (
+                  <div
+                    key={tier.name}
+                    className={`rounded-lg border p-8 ${
+                      tier.popular ? "border-blue-600 ring-2 ring-blue-600" : ""
+                    }`}
+                  >
+                    {tier.popular && (
+                      <span className="mb-4 inline-block rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                        Most Popular
+                      </span>
+                    )}
+                    <h4 className="text-2xl font-bold">{tier.name}</h4>
+                    <p className="mt-2 text-3xl font-bold">
+                      {tier.price}
+                      <span className="text-sm font-normal text-muted-foreground">
+                        /month
+                      </span>
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">{tier.limit}</p>
+                    <ul className="mt-6 space-y-3">
+                      {tier.features.map((f) => (
+                        <li key={f} className="flex items-center text-sm">
+                          <span className="mr-2 text-green-600">✓</span>
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <Link
+                      href="/signup"
+                      className="mt-8 block w-full rounded-md border py-2 text-center text-sm hover:bg-secondary"
+                    >
+                      Get Started
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
