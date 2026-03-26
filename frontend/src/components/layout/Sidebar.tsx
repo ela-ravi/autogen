@@ -17,17 +17,21 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/jobs", label: "Jobs", icon: ListVideo },
-  { href: "/api-keys", label: "API Keys", icon: Key },
-  { href: "/billing", label: "Billing", icon: CreditCard },
+  { href: "/api-keys", label: "API Keys", icon: Key, metaFlag: "enable_api_keys_menu" as const },
+  { href: "/billing", label: "Billing", icon: CreditCard, metaFlag: "enable_billing" as const },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const [version, setVersion] = useState<string>("");
+  const [meta, setMeta] = useState<typeof window.__meta__>(undefined);
 
   useEffect(() => {
-    const check = () => setVersion(window.__meta__?.version || "");
+    const check = () => {
+      setVersion(window.__meta__?.version || "");
+      setMeta(window.__meta__);
+    };
     check();
     const t = setTimeout(check, 2000);
     return () => clearTimeout(t);
@@ -36,7 +40,12 @@ export function Sidebar() {
   return (
     <nav className="flex w-56 flex-col border-r bg-secondary/30 p-4">
       <ul className="flex-1 space-y-1">
-        {navItems.map((item) => (
+        {navItems
+          .filter((item) => {
+            if (!item.metaFlag) return true;
+            return meta?.[item.metaFlag] !== false;
+          })
+          .map((item) => (
           <li key={item.href}>
             <Link
               href={item.href}

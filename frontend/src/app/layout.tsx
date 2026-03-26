@@ -12,6 +12,9 @@ declare global {
       version: string;
       enable_user_api_keys: boolean;
       api_key_restricted_to_emails: boolean;
+      enable_api_keys_menu: boolean;
+      enable_billing: boolean;
+      billing_disabled_message: string | null;
     };
   }
 }

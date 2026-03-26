@@ -29,10 +29,31 @@ const tiers = [
 export default function BillingPage() {
   const { user } = useAuth();
   const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [billingEnabled, setBillingEnabled] = useState(true);
+  const [disabledMessage, setDisabledMessage] = useState("");
 
   useEffect(() => {
-    api.get<UsageSummary>("/billing/usage").then(({ data }) => setUsage(data)).catch(() => {});
+    const meta = window.__meta__;
+    if (meta) {
+      setBillingEnabled(meta.enable_billing);
+      setDisabledMessage(meta.billing_disabled_message || "");
+    } else {
+      const t = setTimeout(() => {
+        const m = window.__meta__;
+        if (m) {
+          setBillingEnabled(m.enable_billing);
+          setDisabledMessage(m.billing_disabled_message || "");
+        }
+      }, 2000);
+      return () => clearTimeout(t);
+    }
   }, []);
+
+  useEffect(() => {
+    if (billingEnabled) {
+      api.get<UsageSummary>("/billing/usage").then(({ data }) => setUsage(data)).catch(() => {});
+    }
+  }, [billingEnabled]);
 
   const handleUpgrade = async (tierName: string) => {
     try {
@@ -44,6 +65,20 @@ export default function BillingPage() {
       // Billing not set up yet
     }
   };
+
+  if (!billingEnabled) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <h2 className="mb-6 text-2xl font-bold">Billing</h2>
+        <div className="rounded-lg border p-8 text-center">
+          <div className="mb-4 text-4xl">-</div>
+          <p className="text-lg font-medium text-muted-foreground">
+            {disabledMessage}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl">

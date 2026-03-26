@@ -57,4 +57,7 @@ async def app_meta():
         "version": settings.APP_VERSION,
         "enable_user_api_keys": settings.ENABLE_USER_API_KEYS,
         "api_key_restricted_to_emails": len(settings.API_KEY_ALLOWED_EMAILS) > 0,
+        "enable_api_keys_menu": settings.ENABLE_API_KEYS_MENU,
+        "enable_billing": settings.ENABLE_BILLING,
+        "billing_disabled_message": settings.BILLING_DISABLED_MESSAGE if not settings.ENABLE_BILLING else None,
     }

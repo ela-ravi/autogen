@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Feature Flags
     ENABLE_USER_API_KEYS: bool = False
     API_KEY_ALLOWED_EMAILS: List[str] = []
+    ENABLE_API_KEYS_MENU: bool = True
+    ENABLE_BILLING: bool = False
+    BILLING_DISABLED_MESSAGE: str = "Billing is not available yet. All features are currently free."
 
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
