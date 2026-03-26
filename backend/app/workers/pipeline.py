@@ -108,33 +108,10 @@ class RecapPipeline:
             self._upload_intermediate(intermediate_keys, "recap_data", recap_data_file)
             self.progress.report(3, "Recap generated", 1.0)
 
-            # Step 4: Extract clips
-            self._update_job(current_step=4, current_step_name="Extracting clips")
-            self.progress.report(4, "Extracting video clips...", 0.0)
-            result = extract_clips_service(
-                local_video_path, recap_data_file, working_dir,
-                target_duration=target_duration,
-                pad_with_black=pad_with_black,
-                progress_callback=self._progress_callback,
-            )
-            recap_video_file = result["recap_video_file"]
-            self._upload_intermediate(intermediate_keys, "recap_video", recap_video_file)
-            self.progress.report(4, "Clips extracted", 1.0)
-
-            # Step 5: Remove audio
-            self._update_job(current_step=5, current_step_name="Removing audio")
-            self.progress.report(5, "Removing original audio...", 0.0)
-            result = remove_audio_service(
-                recap_video_file, working_dir,
-                progress_callback=self._progress_callback,
-            )
-            no_audio_video = result["no_audio_video_file"]
-            self.progress.report(5, "Audio removed", 1.0)
-
-            # Step 6: Generate TTS
+            # Step 4: Generate TTS (moved before clip extraction to determine actual audio duration)
             recap_text_file = os.path.join(working_dir, "output/transcriptions/recap_text.txt")
-            self._update_job(current_step=6, current_step_name="Generating narration")
-            self.progress.report(6, "Generating TTS narration...", 0.0)
+            self._update_job(current_step=4, current_step_name="Generating narration")
+            self.progress.report(4, "Generating TTS narration...", 0.0)
             result = generate_tts_service(
                 recap_text_file, working_dir,
                 target_duration=target_duration,
@@ -142,8 +119,32 @@ class RecapPipeline:
                 progress_callback=self._progress_callback,
             )
             tts_audio_file = result["tts_audio_file"]
+            actual_audio_duration = result["actual_audio_duration"]
             self._upload_intermediate(intermediate_keys, "tts_audio", tts_audio_file)
-            self.progress.report(6, "TTS narration ready", 1.0)
+            self.progress.report(4, f"TTS narration ready ({actual_audio_duration:.1f}s)", 1.0)
+
+            # Step 5: Extract clips (use audio duration so video >= audio)
+            self._update_job(current_step=5, current_step_name="Extracting clips")
+            self.progress.report(5, "Extracting video clips...", 0.0)
+            result = extract_clips_service(
+                local_video_path, recap_data_file, working_dir,
+                target_duration=actual_audio_duration,
+                pad_with_black=True,
+                progress_callback=self._progress_callback,
+            )
+            recap_video_file = result["recap_video_file"]
+            self._upload_intermediate(intermediate_keys, "recap_video", recap_video_file)
+            self.progress.report(5, "Clips extracted", 1.0)
+
+            # Step 6: Remove audio
+            self._update_job(current_step=6, current_step_name="Removing audio")
+            self.progress.report(6, "Removing original audio...", 0.0)
+            result = remove_audio_service(
+                recap_video_file, working_dir,
+                progress_callback=self._progress_callback,
+            )
+            no_audio_video = result["no_audio_video_file"]
+            self.progress.report(6, "Audio removed", 1.0)
 
             # Step 7: Merge audio + video
             self._update_job(current_step=7, current_step_name="Merging final video")

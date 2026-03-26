@@ -33,8 +33,8 @@ def generate_tts_service(
 
     with patched_module_paths(working_dir):
         if progress_callback:
-            progress_callback(step=6, message="Generating TTS narration...")
-        result_path = generate_tts_audio(
+            progress_callback(step=4, message="Generating TTS narration...")
+        result_path, actual_duration = generate_tts_audio(
             recap_text_file,
             target_duration=target_duration,
             output_dir="output/audio",
@@ -42,8 +42,8 @@ def generate_tts_service(
             tts_voice=voice,
         )
         if progress_callback:
-            progress_callback(step=6, message="TTS narration generated")
-        return {"tts_audio_file": result_path}
+            progress_callback(step=4, message="TTS narration generated")
+        return {"tts_audio_file": result_path, "actual_audio_duration": actual_duration}
 
 
 def merge_audio_video_service(

@@ -46,8 +46,8 @@ def extract_clips_service(
     video_path: str,
     recap_data_file: str,
     working_dir: str,
-    target_duration: int = 30,
-    pad_with_black: bool = False,
+    target_duration: float = 30,
+    pad_with_black: bool = True,
     progress_callback: Callable | None = None,
 ) -> dict:
     """Wrap modules.video_processing.extract_and_merge_clips."""
@@ -55,7 +55,7 @@ def extract_clips_service(
 
     with patched_module_paths(working_dir):
         if progress_callback:
-            progress_callback(step=4, message="Extracting and merging video clips...")
+            progress_callback(step=5, message="Extracting and merging video clips...")
         result_path = extract_and_merge_clips(
             video_path,
             recap_data_file,
@@ -64,7 +64,7 @@ def extract_clips_service(
             pad_with_black=pad_with_black,
         )
         if progress_callback:
-            progress_callback(step=4, message="Clips extracted and merged")
+            progress_callback(step=5, message="Clips extracted and merged")
         return {"recap_video_file": result_path}
 
 
@@ -78,8 +78,8 @@ def remove_audio_service(
 
     with patched_module_paths(working_dir):
         if progress_callback:
-            progress_callback(step=5, message="Removing original audio...")
+            progress_callback(step=6, message="Removing original audio...")
         result_path = remove_audio_from_video(video_path)
         if progress_callback:
-            progress_callback(step=5, message="Audio removed")
+            progress_callback(step=6, message="Audio removed")
         return {"no_audio_video_file": result_path}

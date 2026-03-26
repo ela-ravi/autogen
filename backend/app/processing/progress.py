@@ -5,19 +5,19 @@ STEP_WEIGHTS = {
     1: (0, 20),     # Transcription
     2: (20, 25),    # Translation
     3: (25, 40),    # Recap generation
-    4: (40, 65),    # Clip extraction
-    5: (65, 70),    # Audio removal
-    6: (70, 85),    # TTS generation
-    7: (85, 100),   # Audio-video merge
+    4: (40, 55),    # TTS generation (moved before clip extraction)
+    5: (55, 75),    # Clip extraction (uses audio duration as target)
+    6: (75, 80),    # Audio removal
+    7: (80, 100),   # Audio-video merge
 }
 
 STEP_NAMES = {
     1: "Transcribing video",
     2: "Translating transcription",
     3: "Generating recap suggestions",
-    4: "Extracting and merging clips",
-    5: "Removing original audio",
-    6: "Generating TTS narration",
+    4: "Generating TTS narration",
+    5: "Extracting and merging clips",
+    6: "Removing original audio",
     7: "Merging audio with video",
 }
 

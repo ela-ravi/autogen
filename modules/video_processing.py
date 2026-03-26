@@ -185,38 +185,6 @@ REJECT if:
     # Sort clips by start time to ensure chronological order
     recap_data['clip_timings'] = sorted(clip_timings, key=lambda x: x['start'])
     
-    # Log clip analysis (optional debug logging)
-    try:
-        import time
-        clip_durations = [(c.get('end',0) - c.get('start',0)) for c in clip_timings]
-        dialogue_clips = [c for c in clip_timings if c.get('type') == 'dialogue']
-        atmospheric_clips = [c for c in clip_timings if c.get('type') == 'atmospheric']
-        
-        debug_log_path = '/Volumes/Development/Practise/autogen/.cursor/debug.log'
-        os.makedirs(os.path.dirname(debug_log_path), exist_ok=True)
-        
-        with open(debug_log_path, 'a') as f:
-            f.write(json.dumps({
-                "sessionId":"debug-session",
-                "runId":"initial",
-                "hypothesisId":"A",
-                "location":"video_processing.py:clip_generation",
-                "message":"AI generated clip timings (TWO-PASS approach)",
-                "data":{
-                    "clip_count":len(clip_timings),
-                    "dialogue_clips":len(dialogue_clips),
-                    "atmospheric_clips":len(atmospheric_clips),
-                    "clip_durations":clip_durations,
-                    "total_duration":actual_duration,
-                    "target_duration":target_duration,
-                    "duration_diff":abs(actual_duration - target_duration)
-                },
-                "timestamp":int(time.time()*1000)
-            })+'\n')
-    except Exception:
-        # Debug logging failed - not critical, continue
-        pass
-    
     # Save recap data
     output_path = get_output_path(output_dir)
     os.makedirs(output_path, exist_ok=True)
@@ -283,15 +251,6 @@ def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, out
     # Extract clips
     clips = []
     total_clips_duration = 0
-    # #region agent log
-    import time
-    extraction_log = []
-    # Optional debug logging
-    try:
-        debug_log_path = '/Volumes/Development/Practise/autogen/.cursor/debug.log'
-        os.makedirs(os.path.dirname(debug_log_path), exist_ok=True)
-    except Exception:
-        debug_log_path = None
     
     for i, timing in enumerate(clip_timings, 1):
         start = timing.get("start", 0)
@@ -300,65 +259,37 @@ def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, out
         
         print(f"Extracting clip {i}/{len(clip_timings)}: {start}s-{end}s ({reason})")
         
-        # #region agent log
         try:
-            # #endregion
             clip = video.subclip(start, end)
             clips.append(clip)
-            clip_duration = (end - start)
-            total_clips_duration += clip_duration
-            # #region agent log
-            extraction_log.append({"clip_num":i,"start":start,"end":end,"duration":clip_duration,"success":True})
+            total_clips_duration += (end - start)
         except Exception as e:
-            extraction_log.append({"clip_num":i,"start":start,"end":end,"error":str(e),"success":False})
             print(f"Failed to extract clip {i}: {e}")
-    
-    # Optional debug logging
-    if debug_log_path:
-        try:
-            with open(debug_log_path, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"B","location":"video_processing.py:197","message":"Clip extraction complete","data":{"total_clips_attempted":len(clip_timings),"successful_clips":len(clips),"total_duration":total_clips_duration,"extraction_details":extraction_log},"timestamp":int(time.time()*1000)})+'\n')
-        except Exception:
-            pass
     
     # Concatenate clips
     print("Combining clips...")
     final_clip = concatenate_videoclips(clips, method="compose")
     
-    # Optional debug logging
-    if debug_log_path:
-        try:
-            concat_duration = final_clip.duration if hasattr(final_clip, 'duration') else 0
-            with open(debug_log_path, 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"C","location":"video_processing.py:223","message":"After concatenation","data":{"concatenated_duration":concat_duration,"num_clips":len(clips),"target_duration":target_duration},"timestamp":int(time.time()*1000)})+'\n')
-        except Exception:
-            pass
-    
-    # Adjust to exactly target_duration
+    # Ensure video is at least as long as target_duration (audio duration).
+    # If shorter, pad with black frames. If longer, trim to match.
     current_duration = final_clip.duration
     print(f"Current duration: {current_duration:.2f}s")
-    print(f"Target duration: {target_duration}s")
+    print(f"Target duration (audio): {target_duration}s")
     
-    if abs(current_duration - target_duration) > 0.1:
-        if current_duration < target_duration:
-            if pad_with_black:
-                gap = target_duration - current_duration
-                print(f"Adding {gap:.2f}s of black frames...")
-                
-                black_clip = ColorClip(
-                    size=final_clip.size,
-                    color=(0, 0, 0),
-                    duration=gap
-                )
-                final_clip = concatenate_videoclips([final_clip, black_clip], method="compose")
-                print(f"✅ Padded to exactly {target_duration} seconds")
-            else:
-                print(f"⚠️  Video is {current_duration:.2f}s (shorter than target {target_duration}s)")
-                print(f"   Skipping black frame padding (use --pad-with-black to enable)")
-        elif current_duration > target_duration:
-            print(f"Trimming to {target_duration}s...")
-            final_clip = final_clip.subclip(0, target_duration)
-            print(f"✅ Trimmed to exactly {target_duration} seconds")
+    if current_duration < target_duration - 0.1:
+        gap = target_duration - current_duration
+        print(f"Video shorter than audio — padding with {gap:.2f}s of black frames...")
+        black_clip = ColorClip(
+            size=final_clip.size,
+            color=(0, 0, 0),
+            duration=gap
+        )
+        final_clip = concatenate_videoclips([final_clip, black_clip], method="compose")
+        print(f"✅ Padded to {final_clip.duration:.2f}s")
+    elif current_duration > target_duration + 0.1:
+        print(f"Trimming video from {current_duration:.2f}s to {target_duration:.1f}s...")
+        final_clip = final_clip.subclip(0, target_duration)
+        print(f"✅ Trimmed to {final_clip.duration:.2f}s")
     else:
         print(f"✅ Duration matches target: {current_duration:.2f}s")
     

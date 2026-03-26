@@ -18,7 +18,7 @@ const navItems = [
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/jobs", label: "Jobs", icon: ListVideo },
   { href: "/api-keys", label: "API Keys", icon: Key, metaFlag: "enable_api_keys_menu" as const },
-  { href: "/billing", label: "Billing", icon: CreditCard, disabledFlag: "enable_billing" as const },
+  { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -45,31 +45,22 @@ export function Sidebar() {
             if (!item.metaFlag) return true;
             return meta?.[item.metaFlag] !== false;
           })
-          .map((item) => {
-            const disabled =
-              item.disabledFlag && meta?.[item.disabledFlag] === false;
-            return (
-              <li key={item.href}>
-                <Link
-                  href={disabled ? "#" : item.href}
-                  aria-disabled={disabled || undefined}
-                  tabIndex={disabled ? -1 : undefined}
-                  onClick={disabled ? (e) => e.preventDefault() : undefined}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                    disabled
-                      ? "pointer-events-none opacity-40"
-                      : pathname === item.href
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
+          .map((item) => (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                  pathname === item.href
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            </li>
+          ))}
       </ul>
       {version && (
         <p className="px-3 text-xs text-muted-foreground/60">{version}</p>

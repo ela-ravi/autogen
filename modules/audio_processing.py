@@ -62,16 +62,6 @@ def generate_tts_audio(recap_text_file, target_duration=30, output_dir="output/a
     
     # Generate TTS audio
     print("Generating audio with OpenAI TTS...")
-    # Optional debug logging
-    try:
-        import time
-        import json
-        debug_log_path = '/Volumes/Development/Practise/autogen/.cursor/debug.log'
-        os.makedirs(os.path.dirname(debug_log_path), exist_ok=True)
-        with open(debug_log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"D","location":"audio_processing.py:pre_tts","message":"Before TTS generation","data":{"text_length":len(recap_text),"text_preview":recap_text[:100],"target_duration":target_duration},"timestamp":int(time.time()*1000)})+'\n')
-    except Exception:
-        pass
     
     with client.audio.speech.with_streaming_response.create(
         model=tts_model,
@@ -82,35 +72,35 @@ def generate_tts_audio(recap_text_file, target_duration=30, output_dir="output/a
     ) as response:
         response.stream_to_file(output_file)
     
-    # Get audio duration if pydub is available
-    duration_str = "unknown"
-    actual_duration = None
-    try:
-        from pydub import AudioSegment
-        audio = AudioSegment.from_mp3(output_file)
-        duration = len(audio) / 1000.0
-        actual_duration = duration
-        duration_str = f"{duration:.1f}s"
-    except ImportError:
-        duration_str = "install pydub to check duration"
-    except Exception:
-        pass
+    # Measure TTS duration and pad to target if needed
+    from pydub import AudioSegment
+    audio = AudioSegment.from_mp3(output_file)
+    tts_duration = len(audio) / 1000.0
+    print(f"   Raw TTS duration: {tts_duration:.1f}s")
     
-    # Optional debug logging
-    try:
-        with open(debug_log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"D","location":"audio_processing.py:post_tts","message":"After TTS generation","data":{"actual_duration":actual_duration,"duration_str":duration_str,"file_exists":os.path.exists(output_file)},"timestamp":int(time.time()*1000)})+'\n')
-    except Exception:
-        pass
+    tolerance = 5.0
+    if tts_duration < target_duration - tolerance:
+        gap = target_duration - tts_duration
+        front_pad = int(gap * 0.3 * 1000)
+        back_pad = int(gap * 0.7 * 1000)
+        silence_front = AudioSegment.silent(duration=front_pad)
+        silence_back = AudioSegment.silent(duration=back_pad)
+        audio = silence_front + audio + silence_back
+        print(f"   Padded: +{front_pad/1000:.1f}s front, +{back_pad/1000:.1f}s back")
+    elif tts_duration > target_duration + tolerance:
+        print(f"   TTS is {tts_duration:.1f}s (longer than target+tolerance), keeping as-is")
+    
+    actual_duration = len(audio) / 1000.0
+    audio.export(output_file, format="mp3")
     
     file_size = os.path.getsize(output_file) / 1024
     
     print(f"✅ Audio generated!")
     print(f"   Output: {output_file}")
     print(f"   Size: {file_size:.1f} KB")
-    print(f"   Duration: {duration_str}")
+    print(f"   Final duration: {actual_duration:.1f}s (target: {target_duration}s)")
     
-    return output_file
+    return output_file, actual_duration
 
 
 def merge_audio_with_video(video_path, audio_path, output_path=None):
@@ -157,17 +147,6 @@ def merge_audio_with_video(video_path, audio_path, output_path=None):
     
     video_duration = video.duration
     audio_duration = audio.duration
-    
-    # Optional debug logging
-    try:
-        import time
-        import json
-        debug_log_path = '/Volumes/Development/Practise/autogen/.cursor/debug.log'
-        os.makedirs(os.path.dirname(debug_log_path), exist_ok=True)
-        with open(debug_log_path, 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"initial","hypothesisId":"E","location":"audio_processing.py:pre_merge","message":"Before audio-video merge","data":{"video_duration":video_duration,"audio_duration":audio_duration,"video_path":video_path,"audio_path":audio_path},"timestamp":int(time.time()*1000)})+'\n')
-    except Exception:
-        pass
     
     print(f"\nDuration comparison:")
     print(f"   Video: {video_duration:.1f}s")
