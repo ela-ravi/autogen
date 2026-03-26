@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     WHISPER_MODEL_SIZE: str = "small"
 
+    # Feature Flags
+    ENABLE_USER_API_KEYS: bool = False
+    API_KEY_ALLOWED_EMAILS: List[str] = []
+
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 

@@ -35,6 +35,28 @@ class UserResponse(BaseModel):
     auth_provider: str
     is_active: bool
     tier: str
+    has_openai_key: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_user(cls, user) -> "UserResponse":
+        return cls(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            auth_provider=user.auth_provider,
+            is_active=user.is_active,
+            tier=user.tier,
+            has_openai_key=user.encrypted_openai_key is not None,
+            created_at=user.created_at,
+        )
+
+
+class FeatureFlagsResponse(BaseModel):
+    requires_api_key: bool
+
+
+class OpenAIKeyRequest(BaseModel):
+    openai_api_key: str

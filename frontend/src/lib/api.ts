@@ -22,7 +22,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       Cookies.remove("access_token");
       Cookies.remove("refresh_token");
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
       }
     }

@@ -6,8 +6,10 @@ from app.core.oauth import GoogleOAuthError, verify_google_token
 from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.models.user import User
 from app.schemas.auth import (
+    FeatureFlagsResponse,
     GoogleAuthRequest,
     LoginRequest,
+    OpenAIKeyRequest,
     RefreshRequest,
     SignupRequest,
     TokenResponse,
@@ -80,4 +82,31 @@ async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db
 
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return UserResponse.from_user(current_user)
+
+
+@router.get("/feature-flags", response_model=FeatureFlagsResponse)
+async def feature_flags(current_user: User = Depends(get_current_user)):
+    requires = user_service.user_requires_api_key(current_user.email)
+    return FeatureFlagsResponse(requires_api_key=requires)
+
+
+@router.put("/me/openai-key", status_code=status.HTTP_200_OK)
+async def set_openai_key(
+    body: OpenAIKeyRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not body.openai_api_key or not body.openai_api_key.strip():
+        raise HTTPException(status_code=400, detail="API key cannot be empty")
+    await user_service.update_openai_key(db, current_user.id, body.openai_api_key.strip())
+    return {"detail": "OpenAI API key saved"}
+
+
+@router.delete("/me/openai-key", status_code=status.HTTP_200_OK)
+async def remove_openai_key(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await user_service.clear_openai_key(db, current_user.id)
+    return {"detail": "OpenAI API key removed"}

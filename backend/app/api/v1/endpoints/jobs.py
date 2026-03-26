@@ -20,6 +20,14 @@ async def create_job(
     from app.core.permissions import check_quota
     await check_quota(db, current_user.id, current_user.tier)
 
+    # Check if user must supply their own OpenAI key
+    from app.services.user_service import user_requires_api_key
+    if user_requires_api_key(current_user.email) and not current_user.encrypted_openai_key:
+        raise HTTPException(
+            status_code=400,
+            detail="You must set your OpenAI API key in Settings before creating a job",
+        )
+
     # Verify the upload exists in S3
     if not storage.file_exists(body.s3_key):
         raise HTTPException(status_code=400, detail="Upload not found")

@@ -1,8 +1,18 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import hash_password, verify_password
+from app.config import settings
+from app.core.security import hash_password, verify_password, encrypt_api_key
 from app.models.user import User
+
+
+def user_requires_api_key(email: str) -> bool:
+    """Check whether a user must provide their own OpenAI API key."""
+    if not settings.ENABLE_USER_API_KEYS:
+        return False
+    if not settings.API_KEY_ALLOWED_EMAILS:
+        return True
+    return email in settings.API_KEY_ALLOWED_EMAILS
 
 
 async def create_user(
@@ -72,3 +82,19 @@ async def get_or_create_google_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+async def update_openai_key(db: AsyncSession, user_id: str, plain_key: str) -> None:
+    user = await get_by_id(db, user_id)
+    if not user:
+        raise ValueError("User not found")
+    user.encrypted_openai_key = encrypt_api_key(plain_key)
+    await db.commit()
+
+
+async def clear_openai_key(db: AsyncSession, user_id: str) -> None:
+    user = await get_by_id(db, user_id)
+    if not user:
+        raise ValueError("User not found")
+    user.encrypted_openai_key = None
+    await db.commit()

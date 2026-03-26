@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timezone
 
 import redis
@@ -6,8 +7,11 @@ from sqlalchemy import select, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
+from app.core.security import decrypt_api_key
 from app.models.job import RecapJob
+from app.models.user import User
 from app.services.storage import storage
+from app.services.user_service import user_requires_api_key
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -54,6 +58,19 @@ def _combined_update(job_id: str, **kwargs):
     _publish_progress(job_id, **kwargs)
 
 
+def _resolve_openai_key(user_id: str) -> str | None:
+    """Return the decrypted user key if required, else None (use system key)."""
+    with SyncSession() as session:
+        user = session.execute(
+            select(User).where(User.id == user_id)
+        ).scalar_one_or_none()
+        if not user:
+            return None
+        if user_requires_api_key(user.email) and user.encrypted_openai_key:
+            return decrypt_api_key(user.encrypted_openai_key)
+    return None
+
+
 @celery_app.task(bind=True, name="app.workers.tasks.process_recap_job")
 def process_recap_job(self, job_id: str):
     """Main task: runs the 7-step recap pipeline."""
@@ -62,7 +79,8 @@ def process_recap_job(self, job_id: str):
     # Mark job as started
     _update_job_sync(job_id, status="processing", started_at=datetime.now(timezone.utc))
 
-    # Load job config
+    # Load job config and resolve user's OpenAI key
+    user_openai_key = None
     with SyncSession() as session:
         job = session.execute(
             select(RecapJob).where(RecapJob.id == job_id)
@@ -72,9 +90,16 @@ def process_recap_job(self, job_id: str):
             return
         job_config = job.config
         input_video_key = job.input_video_key
+        user_openai_key = _resolve_openai_key(job.user_id)
 
     # Store celery task ID
     _update_job_sync(job_id, celery_task_id=self.request.id)
+
+    # Inject user's OpenAI API key if present (concurrency=1, no race)
+    original_key = os.environ.get("OPENAI_API_KEY")
+    if user_openai_key:
+        os.environ["OPENAI_API_KEY"] = user_openai_key
+        logger.info(f"Using user-provided OpenAI key for job {job_id}")
 
     from app.workers.pipeline import RecapPipeline
 
@@ -111,6 +136,12 @@ def process_recap_job(self, job_id: str):
             f"job:{job_id}:progress",
             json.dumps({"type": "failed", "error": str(e)}),
         )
+    finally:
+        if user_openai_key:
+            if original_key is not None:
+                os.environ["OPENAI_API_KEY"] = original_key
+            else:
+                os.environ.pop("OPENAI_API_KEY", None)
 
 
 @celery_app.task(name="app.workers.tasks.cleanup_expired_files")
