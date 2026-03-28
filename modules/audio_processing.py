@@ -27,7 +27,7 @@ def generate_tts_audio(recap_text_file, target_duration=30, output_dir="output/a
     
     Args:
         recap_text_file: Path to recap_text.txt
-        target_duration: Target duration in seconds
+        target_duration: Requested recap length in seconds (informational; not used to pad audio)
         output_dir: Directory to save audio
         tts_model: OpenAI TTS model (tts-1 or tts-1-hd)
         tts_voice: Voice to use (alloy, echo, fable, onyx, nova, shimmer)
@@ -72,25 +72,12 @@ def generate_tts_audio(recap_text_file, target_duration=30, output_dir="output/a
     ) as response:
         response.stream_to_file(output_file)
     
-    # Measure TTS duration and pad to target if needed
+    # Duration matches spoken audio only (no silence padding toward target_duration —
+    # padding caused long mute stretches vs. video after merge).
     from pydub import AudioSegment
     audio = AudioSegment.from_mp3(output_file)
-    tts_duration = len(audio) / 1000.0
-    print(f"   Raw TTS duration: {tts_duration:.1f}s")
-    
-    tolerance = 5.0
-    if tts_duration < target_duration - tolerance:
-        gap = target_duration - tts_duration
-        front_pad = int(gap * 0.3 * 1000)
-        back_pad = int(gap * 0.7 * 1000)
-        silence_front = AudioSegment.silent(duration=front_pad)
-        silence_back = AudioSegment.silent(duration=back_pad)
-        audio = silence_front + audio + silence_back
-        print(f"   Padded: +{front_pad/1000:.1f}s front, +{back_pad/1000:.1f}s back")
-    elif tts_duration > target_duration + tolerance:
-        print(f"   TTS is {tts_duration:.1f}s (longer than target+tolerance), keeping as-is")
-    
     actual_duration = len(audio) / 1000.0
+    print(f"   TTS duration: {actual_duration:.1f}s (target was {target_duration}s; output follows speech only)")
     audio.export(output_file, format="mp3")
     
     file_size = os.path.getsize(output_file) / 1024
@@ -103,15 +90,21 @@ def generate_tts_audio(recap_text_file, target_duration=30, output_dir="output/a
     return output_file, actual_duration
 
 
-def merge_audio_with_video(video_path, audio_path, output_path=None):
+def merge_audio_with_video(
+    video_path,
+    audio_path,
+    output_path=None,
+    max_duration_seconds=None,
+):
     """
     Step 7: Merge audio with video
-    
+
     Args:
         video_path: Path to video file
         audio_path: Path to audio file
         output_path: Path for output video (optional)
-    
+        max_duration_seconds: If set, trim both tracks to at most this length (user target + grace).
+
     Returns:
         Path to final video with audio
     """
@@ -147,11 +140,23 @@ def merge_audio_with_video(video_path, audio_path, output_path=None):
     
     video_duration = video.duration
     audio_duration = audio.duration
-    
+
+    # Align to user-requested recap cap so long narration cannot force multi-minute outputs
+    if max_duration_seconds is not None and max_duration_seconds > 1:
+        lim = min(video_duration, audio_duration, float(max_duration_seconds))
+        if video_duration > lim + 0.05:
+            print(f"   → Trimming video to {lim:.1f}s (max_duration cap / alignment)")
+            video = video.subclip(0, lim)
+            video_duration = video.duration
+        if audio_duration > lim + 0.05:
+            print(f"   → Trimming audio to {lim:.1f}s (max_duration cap / alignment)")
+            audio = audio.subclip(0, lim)
+            audio_duration = audio.duration
+
     print(f"\nDuration comparison:")
     print(f"   Video: {video_duration:.1f}s")
     print(f"   Audio: {audio_duration:.1f}s")
-    
+
     # Adjust audio to match video duration
     if abs(audio_duration - video_duration) > 0.1:
         if audio_duration < video_duration:

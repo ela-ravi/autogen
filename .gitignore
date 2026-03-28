@@ -114,3 +114,11 @@ video_recap_agent/output/videos/.gitkeep
 video_recap_agent/output/audio/.gitkeep
 video_recap_agent/output/original/.gitkeep
 video_recap_agent/output/temp/.gitkeep
+
+node_modules/
+
+# Next.js
+.next/
+out/
+frontend/.next/
+*.tsbuildinfo

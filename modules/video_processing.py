@@ -40,7 +40,6 @@ def generate_recap_suggestions(transcription_file, target_duration=30, output_di
     print(f"STEP 3: GENERATING AI RECAP SUGGESTIONS")
     print(f"{'='*70}")
     print(f"Input: {transcription_file}")
-    print(f"Target duration: {target_duration}s")
     
     # Read transcription
     with open(transcription_file, "r") as f:
@@ -50,6 +49,12 @@ def generate_recap_suggestions(transcription_file, target_duration=30, output_di
         raise ValueError("Transcription file is empty")
     
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    # ~2.0 words/sec keeps OpenAI TTS closer to target_duration (2.3 overshot and forced long outputs).
+    narration_word_target = max(35, min(220, round(target_duration * 2.0)))
+    narration_word_min = max(25, narration_word_target - 25)
+    narration_word_max = min(230, narration_word_target + 30)
+    print(f"Target duration: {target_duration}s (narration ~{narration_word_target} words, range {narration_word_min}-{narration_word_max})")
     
     prompt = f"""You are a professional video editor analyzing a noisy video transcription that contains meaningful English dialogue mixed with gibberish, symbols, non-English text, and background sounds.
 
@@ -87,10 +92,10 @@ NARRATION GENERATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Based on the FULL clip timeline (dialogue + atmospheric):
-1. Write a natural, cohesive narration (75-80 words)
+1. Write a natural, cohesive narration of about {narration_word_target} spoken words (stay within {narration_word_min}-{narration_word_max} words) so voiceover length matches roughly {target_duration} seconds
 2. Account for atmospheric clips as transitions, mood, or buildup
 3. Create smooth narrative flow across all clips
-4. Time for {target_duration} seconds of voiceover
+4. Do not add filler silence or padding instructions — write tight, speech-ready copy only
 5. Never mention "gibberish", "errors", or transcription issues
 
 Example narration flow:
@@ -102,7 +107,7 @@ OUTPUT FORMAT
 
 Provide your response as JSON:
 {{
-    "recap_text": "Your natural narration (75-80 words, accounts for all clips)",
+    "recap_text": "Your natural narration (~{narration_word_target} words, accounts for all clips)",
     "clip_timings": [
         {{"start": 0, "end": 5, "reason": "Opening dialogue", "type": "dialogue"}},
         {{"start": 10, "end": 13, "reason": "Visual transition", "type": "atmospheric"}},
@@ -116,7 +121,7 @@ CRITICAL VALIDATION CHECKLIST:
 ✓ Sum of (end - start) for ALL clips = EXACTLY {target_duration} seconds
 ✓ Clips are in chronological order (sorted by start time)
 ✓ No duplicate timestamps
-✓ Narration is 75-80 words
+✓ Narration is about {narration_word_target} words (within {narration_word_min}-{narration_word_max})
 ✓ Narration accounts for atmospheric clips smoothly
 ✓ Mix of "dialogue" and "atmospheric" clips if needed
 
@@ -126,7 +131,14 @@ REJECT if:
 ✗ Clips out of chronological order
 """
     
-    system_msg = "You are a professional video editor skilled at creating engaging recaps from noisy transcriptions. You use a TWO-PASS approach: (1) Select dialogue clips first, (2) Fill remaining duration with atmospheric/transition clips from non-dialogue segments. You ALWAYS ensure clips total EXACTLY the target duration by using both dialogue and atmospheric moments. You maintain chronological order and create smooth, natural narrations that account for all clip types. Always respond with valid JSON."
+    system_msg = (
+        "You are a professional video editor skilled at creating engaging recaps from noisy transcriptions. "
+        "You use a TWO-PASS approach: (1) Select dialogue clips first, (2) Fill remaining duration with "
+        "atmospheric/transition clips from non-dialogue segments. You ALWAYS ensure clips total EXACTLY the "
+        "target duration by using both dialogue and atmospheric moments. You maintain chronological order and "
+        "write narrations whose LENGTH IN WORDS scales with the requested recap duration (not a fixed short paragraph). "
+        "Always respond with valid JSON."
+    )
     messages = [
         {"role": "system", "content": system_msg},
         {"role": "user", "content": prompt}

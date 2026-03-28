@@ -51,6 +51,7 @@ def merge_audio_video_service(
     audio_path: str,
     working_dir: str,
     progress_callback: Callable | None = None,
+    max_duration_seconds: float | None = None,
 ) -> dict:
     """Wrap modules.audio_processing.merge_audio_with_video."""
     from modules.audio_processing import merge_audio_with_video
@@ -58,7 +59,11 @@ def merge_audio_video_service(
     with patched_module_paths(working_dir):
         if progress_callback:
             progress_callback(step=7, message="Merging audio with video...")
-        result_path = merge_audio_with_video(video_path, audio_path)
+        result_path = merge_audio_with_video(
+            video_path,
+            audio_path,
+            max_duration_seconds=max_duration_seconds,
+        )
         if progress_callback:
             progress_callback(step=7, message="Final video ready")
         return {"final_video_file": result_path}

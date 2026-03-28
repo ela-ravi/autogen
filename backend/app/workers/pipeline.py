@@ -209,13 +209,19 @@ class RecapPipeline:
             else:
                 self.progress.report(4, "TTS narration (cached)", 1.0)
 
-            # Step 5: Extract clips
+            # Cap montage/merge length at user target + overshoot so long TTS cannot stretch
+            # output to audio+5 only (e.g. ~88s when user asked 60s).
+            overshoot = 5
+            user_trim_cap = target_duration + overshoot
+            _ad = actual_audio_duration if actual_audio_duration is not None else float(target_duration)
+            clip_trim_target = min(user_trim_cap, _ad + overshoot)
+
             if resume_from_step <= 5:
                 self._update_job(current_step=5, current_step_name="Extracting clips")
                 self.progress.report(5, "Extracting video clips...", 0.0)
                 result = extract_clips_service(
                     local_video_path, recap_data_file, working_dir,
-                    target_duration=actual_audio_duration + 5,
+                    target_duration=clip_trim_target,
                     progress_callback=self._progress_callback,
                 )
                 recap_video_file = result["recap_video_file"]
@@ -241,8 +247,11 @@ class RecapPipeline:
             self._update_job(current_step=7, current_step_name="Merging final video")
             self.progress.report(7, "Merging audio with video...", 0.0)
             result = merge_audio_video_service(
-                no_audio_video, tts_audio_file, working_dir,
+                no_audio_video,
+                tts_audio_file,
+                working_dir,
                 progress_callback=self._progress_callback,
+                max_duration_seconds=user_trim_cap,
             )
             final_video = result["final_video_file"]
             self.progress.report(7, "Final video ready", 1.0)
