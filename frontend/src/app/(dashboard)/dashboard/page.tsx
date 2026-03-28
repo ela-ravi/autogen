@@ -81,7 +81,7 @@ export default function DashboardPage() {
             {jobs.slice(0, 5).map((job) => (
               <Link
                 key={job.id}
-                href={`/jobs/${job.id}`}
+                href={`/jobs?job=${encodeURIComponent(job.id)}`}
                 className="flex items-center justify-between p-4 hover:bg-secondary/50"
               >
                 <div>

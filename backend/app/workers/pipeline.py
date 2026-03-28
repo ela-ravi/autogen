@@ -10,6 +10,7 @@ from app.processing.audio_processing import generate_tts_service, merge_audio_vi
 from app.processing.progress import ProgressReporter
 from app.processing.transcription import transcribe_video_service, translate_transcription_service
 from app.processing.video_processing import extract_clips_service, generate_recap_service, remove_audio_service
+from app.config import settings
 from app.services.storage import storage
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class RecapPipeline:
     """Orchestrates the 7-step video recap pipeline with S3 integration."""
 
-    def __init__(self, job_id: str, job_config: dict, input_video_key: str,
+    def __init__(self, job_id: str, job_config: dict, input_video_key: str | None,
                  update_job_fn=None, publish_progress_fn=None):
         self.job_id = job_id
         self.config = job_config
@@ -73,6 +74,11 @@ class RecapPipeline:
         intermediate_keys = dict(existing_intermediate_keys or {})
 
         try:
+            if not self.input_video_key:
+                raise ValueError(
+                    "Original upload is no longer in storage and cannot be used to continue processing."
+                )
+
             # Always download input video
             self._update_job(status="processing", current_step=0, current_step_name="Downloading video")
             self.progress.report(0, "Downloading video from storage...", 0.0)
@@ -101,11 +107,11 @@ class RecapPipeline:
                 if "translation" in intermediate_keys:
                     active_transcription = self._download_intermediate(
                         intermediate_keys, "translation",
-                        os.path.join(working_dir, "output/transcriptions/translated.txt"))
+                        os.path.join(working_dir, "output/transcriptions/translated.json"))
                 if not active_transcription and "transcription" in intermediate_keys:
                     active_transcription = self._download_intermediate(
                         intermediate_keys, "transcription",
-                        os.path.join(working_dir, "output/transcriptions/transcription.txt"))
+                        os.path.join(working_dir, "output/transcriptions/transcription.json"))
                 transcription_file = active_transcription
 
             if resume_from_step >= 4 and "recap_data" in intermediate_keys:
@@ -205,16 +211,25 @@ class RecapPipeline:
                 tts_audio_file = result["tts_audio_file"]
                 actual_audio_duration = result["actual_audio_duration"]
                 self._upload_intermediate(intermediate_keys, "tts_audio", tts_audio_file)
+                if actual_audio_duration < target_duration * 0.6:
+                    logger.warning(
+                        "TTS audio (%.1fs) is much shorter than target (%ds) — "
+                        "narration may have underproduced words",
+                        actual_audio_duration, target_duration,
+                    )
                 self.progress.report(4, f"TTS narration ready ({actual_audio_duration:.1f}s)", 1.0)
             else:
                 self.progress.report(4, "TTS narration (cached)", 1.0)
 
-            # Cap montage/merge length at user target + overshoot so long TTS cannot stretch
-            # output to audio+5 only (e.g. ~88s when user asked 60s).
+            # Clip/merge duration logic:
+            # - Never exceed target + small overshoot (prevents runaway output)
+            # - Never shrink below target_duration even if TTS came out short
+            #   (better to have extra silent video than to throw away the user's
+            #   target because the narration underproduced)
             overshoot = 5
             user_trim_cap = target_duration + overshoot
             _ad = actual_audio_duration if actual_audio_duration is not None else float(target_duration)
-            clip_trim_target = min(user_trim_cap, _ad + overshoot)
+            clip_trim_target = max(float(target_duration), min(user_trim_cap, _ad + overshoot))
 
             if resume_from_step <= 5:
                 self._update_job(current_step=5, current_step_name="Extracting clips")
@@ -275,7 +290,29 @@ class RecapPipeline:
                 expires_at=expires_at,
             )
 
-            return {"output_key": output_key, "intermediate_keys": intermediate_keys}
+            # Best-effort post-completion cleanup: remove the original upload.
+            # This must NEVER revert the successful completion above.
+            input_removed = False
+            if settings.DELETE_INPUT_VIDEO_ON_COMPLETE and self.input_video_key:
+                input_key = self.input_video_key
+                try:
+                    # DB first: clear the key so no code path references a
+                    # file that is about to be deleted.
+                    self._update_job(input_video_key=None)
+                    storage.delete_file(input_key)
+                    self.input_video_key = None
+                    input_removed = True
+                except Exception:
+                    logger.warning(
+                        "Post-completion input cleanup failed for job %s",
+                        self.job_id, exc_info=True,
+                    )
+
+            return {
+                "output_key": output_key,
+                "intermediate_keys": intermediate_keys,
+                "input_removed": input_removed,
+            }
 
         except Exception as e:
             logger.exception(f"Pipeline failed for job {self.job_id}")

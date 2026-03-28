@@ -44,6 +44,7 @@ export interface Job {
   started_at: string | null;
   completed_at: string | null;
   expires_at: string | null;
+  has_original_in_storage: boolean;
 }
 
 export interface JobListResponse {
@@ -98,4 +99,5 @@ export interface ProgressEvent {
   message?: string;
   output_video_key?: string;
   error?: string;
+  input_removed?: boolean;
 }

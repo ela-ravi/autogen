@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field
+
+from app.models.job import RecapJob
 
 
 class JobConfig(BaseModel):
@@ -36,6 +40,7 @@ class JobResponse(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     expires_at: datetime | None
+    has_original_in_storage: bool
 
     model_config = {"from_attributes": True}
 
@@ -50,3 +55,23 @@ class JobListResponse(BaseModel):
 class DownloadResponse(BaseModel):
     download_url: str
     expires_in: int = 3600
+
+
+def job_to_response(job: RecapJob) -> JobResponse:
+    return JobResponse(
+        id=job.id,
+        user_id=job.user_id,
+        status=job.status,
+        current_step=job.current_step,
+        current_step_name=job.current_step_name,
+        progress_pct=job.progress_pct,
+        error_message=job.error_message,
+        original_filename=job.original_filename,
+        file_size_bytes=job.file_size_bytes,
+        config=job.config,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        expires_at=job.expires_at,
+        has_original_in_storage=job.input_video_key is not None,
+    )

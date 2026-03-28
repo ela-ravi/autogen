@@ -19,208 +19,261 @@ def get_output_path(relative_path):
     return os.path.join(SCRIPT_DIR, relative_path)
 
 
+def _parse_llm_json(raw: str) -> dict:
+    """Strip markdown fences and parse JSON from an LLM response."""
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+    return json.loads(text.strip())
+
+
+def _read_transcript_segments(path: str) -> list[dict]:
+    """Load transcript segments from JSON or legacy .txt."""
+    if path.endswith(".json"):
+        with open(path, "r") as f:
+            return json.load(f)
+    segments = []
+    with open(path, "r") as f:
+        for line in f:
+            parts = line.strip().split(": ", 1)
+            if len(parts) == 2:
+                ts, text = parts
+                ts_parts = ts.replace("s", "").split(" to ")
+                try:
+                    segments.append({
+                        "start": float(ts_parts[0]),
+                        "end": float(ts_parts[1]),
+                        "text": text,
+                    })
+                except (ValueError, IndexError):
+                    continue
+    return segments
+
+
+def validate_clip_timings(clip_timings: list[dict], video_duration: float | None = None) -> list[dict]:
+    """Sanitize and validate LLM-returned clip windows.
+
+    Fixes:
+      - Negative / zero-length clips (dropped)
+      - end > video_duration (clamped)
+      - Overlapping ranges (later clip trimmed)
+      - Non-chronological order (sorted)
+
+    Returns the cleaned list; raises ValueError if nothing survives.
+    """
+    cleaned = []
+    for clip in sorted(clip_timings, key=lambda c: c["start"]):
+        start = round(float(clip.get("start", 0)), 2)
+        end = round(float(clip.get("end", start)), 2)
+        if end <= start:
+            continue
+        if video_duration is not None and start >= video_duration:
+            continue
+        if video_duration is not None and end > video_duration:
+            end = round(video_duration, 2)
+        if cleaned:
+            prev_end = cleaned[-1]["end"]
+            if start < prev_end:
+                start = prev_end
+            if end <= start:
+                continue
+        cleaned.append({**clip, "start": start, "end": end})
+
+    if not cleaned:
+        raise ValueError("No valid clip timings after validation")
+    return cleaned
+
+
 def generate_recap_suggestions(transcription_file, target_duration=30, output_dir="output/transcriptions"):
     """
-    Step 3: Generate AI-powered recap suggestions
-    
-    Args:
-        transcription_file: Path to transcription.txt
-        target_duration: Target duration for recap in seconds
-        output_dir: Directory to save recap data
-    
+    Step 3: Generate AI-powered recap suggestions using two focused LLM calls.
+
+    Call 1 — Clip selection (video-editor mindset): returns clip_timings only.
+    Call 2 — Narration (scriptwriter mindset): given the selected clips, writes
+             recap_text calibrated to the visual timeline.
+
+    Accepts JSON (preferred) or legacy .txt transcription files.
+
     Returns:
         Path to recap_data.json
     """
     from openai import OpenAI
     import dotenv
-    
+
     dotenv.load_dotenv()
-    
+
     print(f"\n{'='*70}")
     print(f"STEP 3: GENERATING AI RECAP SUGGESTIONS")
     print(f"{'='*70}")
     print(f"Input: {transcription_file}")
-    
-    # Read transcription
-    with open(transcription_file, "r") as f:
-        transcript_content = f.read()
-    
-    if not transcript_content.strip():
-        raise ValueError("Transcription file is empty")
-    
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # ~2.0 words/sec keeps OpenAI TTS closer to target_duration (2.3 overshot and forced long outputs).
+    segments = _read_transcript_segments(transcription_file)
+    if not segments:
+        raise ValueError("Transcription file is empty or has no segments")
+
+    transcript_json = json.dumps(segments, indent=2)
+
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    model_name = os.getenv("OPENAI_MODEL", "gpt-4o")
+
     narration_word_target = max(35, min(220, round(target_duration * 2.0)))
     narration_word_min = max(25, narration_word_target - 25)
     narration_word_max = min(230, narration_word_target + 30)
     print(f"Target duration: {target_duration}s (narration ~{narration_word_target} words, range {narration_word_min}-{narration_word_max})")
-    
-    prompt = f"""You are a professional video editor analyzing a noisy video transcription that contains meaningful English dialogue mixed with gibberish, symbols, non-English text, and background sounds.
 
-Transcription:
-{transcript_content}
-
-YOUR TASK: Create a {target_duration}-second video recap using a TWO-PASS clip selection approach.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PASS 1: PRIMARY CLIPS (Meaningful Dialogue)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-1. Identify segments with clear, meaningful English dialogue
-2. Extract timestamps for these dialogue-driven moments
-3. Calculate total duration of these clips
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PASS 2: SUPPLEMENTAL CLIPS (Fill to {target_duration} seconds)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-IF primary clips total < {target_duration} seconds:
-1. Identify segments with gibberish/sounds/non-English (unused timestamps)
-2. Select these as "atmospheric" or "transitional" clips
-3. Insert them in CHRONOLOGICAL ORDER (not at the end)
-4. Label them as: "Atmospheric moment", "Visual transition", "Emotional buildup", etc.
-5. Continue until total = EXACTLY {target_duration} seconds
-
-IMPORTANT: 
-- Keep all clips in chronological order by timestamp
-- Do NOT duplicate any timestamps
-- Supplemental clips should fit naturally between dialogue clips
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NARRATION GENERATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Based on the FULL clip timeline (dialogue + atmospheric):
-1. Write a natural, cohesive narration of about {narration_word_target} spoken words (stay within {narration_word_min}-{narration_word_max} words) so voiceover length matches roughly {target_duration} seconds
-2. Account for atmospheric clips as transitions, mood, or buildup
-3. Create smooth narrative flow across all clips
-4. Do not add filler silence or padding instructions — write tight, speech-ready copy only
-5. Never mention "gibberish", "errors", or transcription issues
-
-Example narration flow:
-"[Dialogue moment] ... [transition acknowledging atmosphere] ... [next dialogue moment]"
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT FORMAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Provide your response as JSON:
-{{
-    "recap_text": "Your natural narration (~{narration_word_target} words, accounts for all clips)",
-    "clip_timings": [
-        {{"start": 0, "end": 5, "reason": "Opening dialogue", "type": "dialogue"}},
-        {{"start": 10, "end": 13, "reason": "Visual transition", "type": "atmospheric"}},
-        {{"start": 19, "end": 22, "reason": "Key moment", "type": "dialogue"}},
-        ...
-    ],
-    "total_duration": {target_duration}
-}}
-
-CRITICAL VALIDATION CHECKLIST:
-✓ Sum of (end - start) for ALL clips = EXACTLY {target_duration} seconds
-✓ Clips are in chronological order (sorted by start time)
-✓ No duplicate timestamps
-✓ Narration is about {narration_word_target} words (within {narration_word_min}-{narration_word_max})
-✓ Narration accounts for atmospheric clips smoothly
-✓ Mix of "dialogue" and "atmospheric" clips if needed
-
-REJECT if:
-✗ Total duration ≠ {target_duration} seconds
-✗ Only dialogue clips and total < {target_duration} seconds (MUST add atmospheric clips)
-✗ Clips out of chronological order
-"""
-    
-    system_msg = (
-        "You are a professional video editor skilled at creating engaging recaps from noisy transcriptions. "
-        "You use a TWO-PASS approach: (1) Select dialogue clips first, (2) Fill remaining duration with "
-        "atmospheric/transition clips from non-dialogue segments. You ALWAYS ensure clips total EXACTLY the "
-        "target duration by using both dialogue and atmospheric moments. You maintain chronological order and "
-        "write narrations whose LENGTH IN WORDS scales with the requested recap duration (not a fixed short paragraph). "
-        "Always respond with valid JSON."
+    # ------------------------------------------------------------------
+    # CALL 1 — Clip selection
+    # ------------------------------------------------------------------
+    clip_system = (
+        "You are a professional video editor. Your job is to select the most "
+        "important clip windows from a timestamped transcript to build a recap "
+        "of a specific target duration. Think about coverage, pacing, and "
+        "avoiding redundancy. Always respond with valid JSON only."
     )
-    messages = [
-        {"role": "system", "content": system_msg},
-        {"role": "user", "content": prompt}
-    ]
-    
+    clip_prompt = f"""Below is a transcript as a JSON array. Each element has "start" (seconds),
+"end" (seconds), and "text" (what was spoken).
+
+{transcript_json}
+
+Select clips for a {target_duration}-second video recap.
+
+RULES:
+1. Pick segments with the most important or interesting content first.
+2. If meaningful dialogue clips total less than {target_duration}s, add
+   supplemental segments (visual transitions, atmospheric moments) to reach
+   the target.  Label the reason accordingly.
+3. Keep clips in chronological order (sorted by start time).
+4. No overlapping ranges. No duplicate timestamps.
+5. Sum of (end - start) for all clips must equal EXACTLY {target_duration}s (±2s tolerance).
+
+Return JSON only — no explanation, no markdown fences:
+{{
+  "clip_timings": [
+    {{"start": <float>, "end": <float>, "reason": "<why this clip>"}},
+    ...
+  ]
+}}"""
+
     tolerance = 2.0
-    recap_data = None
+    clip_timings = []
     actual_duration = 0
     max_attempts = 3
-    
+    clip_messages = [
+        {"role": "system", "content": clip_system},
+        {"role": "user", "content": clip_prompt},
+    ]
+
     for attempt in range(1, max_attempts + 1):
-        print(f"Analyzing transcript with AI (attempt {attempt}/{max_attempts})...")
+        print(f"[Call 1] Selecting clips (attempt {attempt}/{max_attempts})...")
         response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
-            messages=messages,
-            max_tokens=2500
+            model=model_name,
+            messages=clip_messages,
+            max_tokens=2000,
         )
-        
-        result_text = response.choices[0].message.content if response.choices else None
-        
-        if result_text.startswith("```"):
-            result_text = result_text.split("```")[1]
-            if result_text.startswith("json"):
-                result_text = result_text[4:]
-        
-        recap_data = json.loads(result_text.strip())
-        clip_timings = recap_data.get('clip_timings', [])
-        actual_duration = sum(clip['end'] - clip['start'] for clip in clip_timings)
-        
+        result_text = response.choices[0].message.content or ""
+        clip_data = _parse_llm_json(result_text)
+        clip_timings = clip_data.get("clip_timings", [])
+        actual_duration = sum(c["end"] - c["start"] for c in clip_timings)
+
         if abs(actual_duration - target_duration) <= tolerance:
             print(f"   Duration OK: {actual_duration:.1f}s (target {target_duration}s)")
             break
-        
+
         print(f"   Duration mismatch: {actual_duration:.1f}s vs target {target_duration}s — retrying...")
-        messages.append({"role": "assistant", "content": response.choices[0].message.content})
-        messages.append({"role": "user", "content": (
-            f"The clips you selected total {actual_duration:.1f} seconds, but the target is "
-            f"EXACTLY {target_duration} seconds. You are off by "
-            f"{target_duration - actual_duration:.1f}s. Please add more clips to fill the gap. "
-            f"Return the complete corrected JSON with all clips."
+        clip_messages.append({"role": "assistant", "content": result_text})
+        clip_messages.append({"role": "user", "content": (
+            f"The clips total {actual_duration:.1f}s but the target is {target_duration}s. "
+            f"Adjust clips so they total EXACTLY {target_duration}s. Return corrected JSON."
         )})
-    
+
     if abs(actual_duration - target_duration) > tolerance and actual_duration > 0:
         print(f"   Scaling clips: {actual_duration:.1f}s -> {target_duration}s")
         scale = target_duration / actual_duration
-        clip_timings = recap_data.get('clip_timings', [])
         for clip in clip_timings:
-            mid = (clip['start'] + clip['end']) / 2
-            half = ((clip['end'] - clip['start']) * scale) / 2
-            clip['start'] = max(0, round(mid - half, 1))
-            clip['end'] = round(mid + half, 1)
-        recap_data['clip_timings'] = clip_timings
-        actual_duration = sum(c['end'] - c['start'] for c in clip_timings)
+            mid = (clip["start"] + clip["end"]) / 2
+            half = ((clip["end"] - clip["start"]) * scale) / 2
+            clip["start"] = max(0, round(mid - half, 1))
+            clip["end"] = round(mid + half, 1)
+        actual_duration = sum(c["end"] - c["start"] for c in clip_timings)
         print(f"   Scaled duration: {actual_duration:.1f}s")
-    
-    # Sort clips by start time to ensure chronological order
-    recap_data['clip_timings'] = sorted(clip_timings, key=lambda x: x['start'])
-    
-    # Save recap data
+
+    clip_timings = sorted(clip_timings, key=lambda c: c["start"])
+    clip_timings = validate_clip_timings(clip_timings)
+
+    # ------------------------------------------------------------------
+    # CALL 2 — Narration
+    # ------------------------------------------------------------------
+    clip_summary = json.dumps(clip_timings, indent=2)
+    narr_system = (
+        "You are a professional scriptwriter for video narrations. You write "
+        "tight, speech-ready voiceover copy that matches a given clip timeline. "
+        "Always respond with valid JSON only."
+    )
+    narr_prompt = f"""A {target_duration}-second video recap has been assembled from these clips:
+
+{clip_summary}
+
+The original transcript for context:
+{transcript_json}
+
+Write a cohesive voiceover narration for this clip timeline.
+
+RULES:
+1. About {narration_word_target} spoken words (stay within {narration_word_min}-{narration_word_max} words).
+2. The narration must feel natural when played over the selected clips in order.
+3. Account for transitions between clips — smooth bridges, not abrupt topic jumps.
+4. Do not add filler silence or padding instructions — write tight, speech-ready copy only.
+5. Never reference transcription quality, errors, or technical issues.
+
+Return JSON only:
+{{
+  "recap_text": "<your narration>"
+}}"""
+
+    print("[Call 2] Writing narration...")
+    narr_response = client.chat.completions.create(
+        model=model_name,
+        messages=[
+            {"role": "system", "content": narr_system},
+            {"role": "user", "content": narr_prompt},
+        ],
+        max_tokens=1500,
+    )
+    narr_data = _parse_llm_json(narr_response.choices[0].message.content or "{}")
+    recap_text = narr_data.get("recap_text", "")
+
+    # ------------------------------------------------------------------
+    # Assemble and save
+    # ------------------------------------------------------------------
+    recap_data = {
+        "recap_text": recap_text,
+        "clip_timings": clip_timings,
+        "total_duration": round(sum(c["end"] - c["start"] for c in clip_timings), 1),
+    }
+
     output_path = get_output_path(output_dir)
     os.makedirs(output_path, exist_ok=True)
-    
+
     recap_data_file = os.path.join(output_path, "recap_data.json")
     with open(recap_data_file, "w") as f:
         json.dump(recap_data, f, indent=2)
-    
-    # Save recap text separately
+
     recap_text_file = os.path.join(output_path, "recap_text.txt")
     with open(recap_text_file, "w") as f:
-        f.write(recap_data.get("recap_text", ""))
-    
-    clip_count = len(recap_data.get("clip_timings", []))
-    dialogue_count = len([c for c in recap_data.get("clip_timings", []) if c.get('type') == 'dialogue'])
-    atmospheric_count = len([c for c in recap_data.get("clip_timings", []) if c.get('type') == 'atmospheric'])
-    total_duration = recap_data.get("total_duration", 0)
-    
+        f.write(recap_text)
+
+    clip_count = len(clip_timings)
+    total_dur = recap_data["total_duration"]
+
     print(f"✅ Recap suggestions generated!")
-    print(f"   Total clips: {clip_count} ({dialogue_count} dialogue + {atmospheric_count} atmospheric)")
-    print(f"   Total duration: {total_duration}s (target: {target_duration}s)")
+    print(f"   Total clips: {clip_count}")
+    print(f"   Total duration: {total_dur}s (target: {target_duration}s)")
+    print(f"   Narration words: {len(recap_text.split())}")
     print(f"   Data: {recap_data_file}")
     print(f"   Text: {recap_text_file}")
-    
+
     return recap_data_file
 
 
@@ -248,28 +301,32 @@ def extract_and_merge_clips(video_path, recap_data_file, target_duration=30, out
         recap_data = json.load(f)
     
     clip_timings = recap_data.get("clip_timings", [])
-    
+
     if not clip_timings:
         raise ValueError("No clip timings found in recap_data.json")
-    
+
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
-    
+
     # Load original video
     print("Loading video...")
     video = VideoFileClip(video_path)
-    
+
+    # Validate and sanitize clip timings against actual video length
+    clip_timings = validate_clip_timings(clip_timings, video_duration=video.duration)
+    print(f"Validated {len(clip_timings)} clip(s) against video duration {video.duration:.2f}s")
+
     # Extract clips
     clips = []
     total_clips_duration = 0
-    
+
     for i, timing in enumerate(clip_timings, 1):
-        start = timing.get("start", 0)
-        end = timing.get("end", start + 1)
+        start = timing["start"]
+        end = timing["end"]
         reason = timing.get("reason", "clip")
-        
+
         print(f"Extracting clip {i}/{len(clip_timings)}: {start}s-{end}s ({reason})")
-        
+
         try:
             clip = video.subclip(start, end)
             clips.append(clip)
@@ -390,6 +447,7 @@ __all__ = [
     'generate_recap_suggestions',
     'extract_and_merge_clips',
     'remove_audio_from_video',
-    'get_output_path'
+    'validate_clip_timings',
+    'get_output_path',
 ]
 

@@ -20,7 +20,7 @@ class RecapJob(Base, TimestampMixin):
     file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     config: Mapped[dict] = mapped_column(JSON, default=dict)
 
-    input_video_key: Mapped[str] = mapped_column(String, nullable=False)
+    input_video_key: Mapped[str | None] = mapped_column(String, nullable=True)
     output_video_key: Mapped[str | None] = mapped_column(String, nullable=True)
     intermediate_keys: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 

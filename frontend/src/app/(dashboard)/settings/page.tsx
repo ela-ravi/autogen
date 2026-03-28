@@ -137,6 +137,45 @@ export default function SettingsPage() {
       {flags?.requires_api_key && (
         <OpenAIKeySection hasKey={user.has_openai_key} />
       )}
+
+      <div className="rounded-lg border p-6">
+        <h3 className="mb-1 font-semibold">Transcription cache (Whisper)</h3>
+        <p className="mb-4 text-sm text-muted-foreground">
+          The service keeps the AI transcription model loaded in memory so repeat jobs start
+          faster. If you see strange failures on back‑to‑back runs, clear this cache so the next
+          job loads a fresh model (slightly slower once).
+        </p>
+        <ClearWhisperCacheButton />
+      </div>
     </div>
+  );
+}
+
+function ClearWhisperCacheButton() {
+  const [loading, setLoading] = useState(false);
+
+  const handleClear = async () => {
+    setLoading(true);
+    try {
+      await api.post("/processing/clear-whisper-cache");
+      toast.success(
+        "Cache clear scheduled. Start your next job — Whisper will reload on the server workers.",
+      );
+    } catch {
+      toast.error("Could not clear cache. Try again or contact support.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClear}
+      disabled={loading}
+      className="rounded-md border border-amber-600/50 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-50 dark:bg-amber-950/30 dark:text-amber-50 dark:hover:bg-amber-900/40"
+    >
+      {loading ? "Clearing…" : "Clear Whisper model cache"}
+    </button>
   );
 }

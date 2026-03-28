@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # File limits
     MAX_UPLOAD_SIZE_BYTES: int = 2 * 1024 * 1024 * 1024  # 2GB
 
+    # Storage: remove uploaded original from object storage after pipeline succeeds (output retained)
+    DELETE_INPUT_VIDEO_ON_COMPLETE: bool = True
+
     # Celery
     CELERY_BROKER_URL: str = "redis://redis:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/1"

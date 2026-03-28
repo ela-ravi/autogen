@@ -84,13 +84,18 @@ export default function UploadPage() {
       });
       sessionStorage.removeItem(STORAGE_KEY);
       toast.success("Job created! Processing started.");
-      router.push(`/jobs/${data.id}`);
+      router.push(`/jobs?job=${encodeURIComponent(data.id)}`);
     } catch (err: unknown) {
-      const detail =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail || "Failed to create job";
-      if (detail.toLowerCase().includes("api key")) {
-        toast.error(detail, {
+      const raw = (err as { response?: { data?: { detail?: unknown } } })?.response
+        ?.data?.detail;
+      const detailStr =
+        typeof raw === "string"
+          ? raw
+          : Array.isArray(raw)
+            ? raw.map((e) => (typeof e === "object" && e && "msg" in e ? String((e as { msg: string }).msg) : String(e))).join(" ")
+            : "Failed to create job";
+      if (detailStr.toLowerCase().includes("api key")) {
+        toast.error(detailStr, {
           action: {
             label: "Go to Settings",
             onClick: () => router.push("/settings"),
@@ -98,7 +103,15 @@ export default function UploadPage() {
           duration: 8000,
         });
       } else {
-        toast.error(detail);
+        toast.error(detailStr, {
+          description:
+            "If this keeps happening on back-to-back runs, open Settings and use “Clear Whisper model cache”, then try again.",
+          action: {
+            label: "Open Settings",
+            onClick: () => router.push("/settings"),
+          },
+          duration: 12_000,
+        });
       }
     }
   };

@@ -41,4 +41,5 @@ async def test_create_job(authenticated_client, mock_storage):
         data = response.json()
         assert data["status"] == "pending"
         assert data["original_filename"] == "test.mp4"
+        assert data["has_original_in_storage"] is True
         mock_task.delay.assert_called_once()

@@ -2,6 +2,8 @@ import os
 from contextlib import contextmanager
 from typing import Callable
 
+from app.config import settings
+
 
 @contextmanager
 def patched_module_paths(working_dir: str):
@@ -28,11 +30,22 @@ def transcribe_video_service(
     progress_callback: Callable | None = None,
 ) -> dict:
     """Wrap modules.transcription.transcribe_video with path isolation."""
-    from modules.transcription import transcribe_video
+    from modules.transcription import (
+        is_whisper_model_cached,
+        sync_whisper_cache_invalidation,
+        transcribe_video,
+    )
 
     with patched_module_paths(working_dir):
+        sync_whisper_cache_invalidation(settings.REDIS_URL)
         if progress_callback:
-            progress_callback(step=1, message="Loading Whisper model and transcribing...")
+            if is_whisper_model_cached(model_size):
+                progress_callback(step=1, message="Transcribing (Whisper model already loaded)…")
+            else:
+                progress_callback(
+                    step=1,
+                    message="Loading Whisper model (first job on this worker), then transcribing…",
+                )
         result_path = transcribe_video(
             video_path,
             output_dir="output/transcriptions",

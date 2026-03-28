@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_current_user_or_api_key, get_db
 from app.models.user import User
-from app.schemas.job import CreateJobRequest, DownloadResponse, JobListResponse, JobResponse
+from app.schemas.job import CreateJobRequest, DownloadResponse, JobListResponse, JobResponse, job_to_response
 from app.services import job_service
 from app.services.storage import storage
 
@@ -50,7 +50,7 @@ async def create_job(
     from app.workers.tasks import process_recap_job
     process_recap_job.delay(job.id)
 
-    return job
+    return job_to_response(job)
 
 
 @router.get("", response_model=JobListResponse)
@@ -64,7 +64,12 @@ async def list_jobs(
     jobs, total = await job_service.list_jobs(
         db, current_user.id, page=page, per_page=per_page, status_filter=status_filter
     )
-    return JobListResponse(items=jobs, total=total, page=page, per_page=per_page)
+    return JobListResponse(
+        items=[job_to_response(j) for j in jobs],
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
 
 
 @router.get("/{job_id}", response_model=JobResponse)
@@ -76,7 +81,7 @@ async def get_job(
     job = await job_service.get_job(db, job_id, current_user.id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return job_to_response(job)
 
 
 @router.get("/{job_id}/download")
@@ -136,7 +141,7 @@ async def stop_job(
         json.dumps({"type": "stopped", "step": job.current_step, "progress_pct": job.progress_pct}),
     )
 
-    return job
+    return job_to_response(job)
 
 
 @router.post("/{job_id}/resume", response_model=JobResponse)
@@ -152,6 +157,15 @@ async def resume_job(
     if job.status not in ("failed", "stopped"):
         raise HTTPException(status_code=400, detail="Only failed or stopped jobs can be resumed")
 
+    if not job.input_video_key:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Original upload is no longer on our servers, so this job cannot be resumed. "
+                "Start a new job with a new upload."
+            ),
+        )
+
     resume_step = job.current_step or 1
 
     job.status = "processing"
@@ -163,7 +177,7 @@ async def resume_job(
     from app.workers.tasks import process_recap_job
     process_recap_job.delay(job.id, resume_from_step=resume_step)
 
-    return job
+    return job_to_response(job)
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)

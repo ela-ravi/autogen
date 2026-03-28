@@ -54,7 +54,7 @@ def _combined_update(job_id: str, **kwargs):
                                  if k in {"status", "current_step", "current_step_name",
                                           "progress_pct", "error_message", "output_video_key",
                                           "intermediate_keys", "completed_at", "expires_at",
-                                          "started_at"}})
+                                          "started_at", "input_video_key"}})
     _publish_progress(job_id, **kwargs)
 
 
@@ -76,8 +76,7 @@ def process_recap_job(self, job_id: str, resume_from_step: int = 0):
     """Main task: runs the 7-step recap pipeline. Supports resumption from a given step."""
     logger.info(f"Starting recap pipeline for job {job_id} (resume_from_step={resume_from_step})")
 
-    # Mark job as started
-    _update_job_sync(job_id, status="processing", started_at=datetime.now(timezone.utc))
+    import json
 
     # Load job config, intermediate keys, and resolve user's OpenAI key
     user_openai_key = None
@@ -93,6 +92,22 @@ def process_recap_job(self, job_id: str, resume_from_step: int = 0):
         input_video_key = job.input_video_key
         existing_intermediate_keys = job.intermediate_keys or {}
         user_openai_key = _resolve_openai_key(job.user_id)
+
+    if not input_video_key:
+        msg = (
+            "Original upload is no longer available in storage. "
+            "Start a new job with a new upload."
+        )
+        logger.error("Job %s has no input video in storage", job_id)
+        _update_job_sync(job_id, status="failed", error_message=msg)
+        _redis_client.publish(
+            f"job:{job_id}:progress",
+            json.dumps({"type": "failed", "error": msg}),
+        )
+        return
+
+    # Mark job as started
+    _update_job_sync(job_id, status="processing", started_at=datetime.now(timezone.utc))
 
     # Store celery task ID
     _update_job_sync(job_id, celery_task_id=self.request.id)
@@ -116,7 +131,7 @@ def process_recap_job(self, job_id: str, resume_from_step: int = 0):
             k: v for k, v in kw.items()
             if k in {"status", "current_step", "current_step_name", "progress_pct",
                       "error_message", "output_video_key", "intermediate_keys",
-                      "completed_at", "expires_at", "started_at"}
+                      "completed_at", "expires_at", "started_at", "input_video_key"}
         }),
         publish_progress_fn=publish_fn,
     )
@@ -126,11 +141,17 @@ def process_recap_job(self, job_id: str, resume_from_step: int = 0):
             resume_from_step=resume_from_step,
             existing_intermediate_keys=existing_intermediate_keys if resume_from_step > 0 else None,
         )
-        import json
+        payload = {
+            "type": "completed",
+            "step": 7,
+            "progress_pct": 100.0,
+            "output_video_key": result["output_key"],
+        }
+        if result.get("input_removed"):
+            payload["input_removed"] = True
         _redis_client.publish(
             f"job:{job_id}:progress",
-            json.dumps({"type": "completed", "step": 7, "progress_pct": 100.0,
-                        "output_video_key": result["output_key"]}),
+            json.dumps(payload),
         )
         logger.info(f"Pipeline completed for job {job_id}")
     except Exception as e:
@@ -183,6 +204,7 @@ def cleanup_expired_files():
             job.status = "expired"
             job.output_video_key = None
             job.intermediate_keys = None
+            job.input_video_key = None
 
         session.commit()
 

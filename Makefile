@@ -27,10 +27,10 @@ logs-worker:
 
 # --- Database ---
 migrate:
-	docker compose exec backend alembic upgrade head
+	docker compose exec backend bash -c "PYTHONPATH=/app alembic upgrade head"
 
 migration:
-	docker compose exec backend alembic revision --autogenerate -m "$(msg)"
+	docker compose exec backend bash -c "PYTHONPATH=/app alembic revision --autogenerate -m '$(msg)'"
 
 # --- Testing ---
 test:
