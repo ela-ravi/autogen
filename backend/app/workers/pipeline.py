@@ -190,6 +190,7 @@ class RecapPipeline:
                 result = generate_recap_service(
                     active_transcription, working_dir,
                     target_duration=target_duration,
+                    narration_language=translate_to,
                     progress_callback=self._progress_callback,
                 )
                 recap_data_file = result["recap_data_file"]

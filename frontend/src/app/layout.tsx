@@ -18,6 +18,7 @@ declare global {
       enable_billing: boolean;
       billing_disabled_message: string | null;
       google_client_id: string | null;
+      enable_translation: boolean;
     };
   }
 }

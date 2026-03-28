@@ -86,7 +86,7 @@ def validate_clip_timings(clip_timings: list[dict], video_duration: float | None
     return cleaned
 
 
-def generate_recap_suggestions(transcription_file, target_duration=30, output_dir="output/transcriptions"):
+def generate_recap_suggestions(transcription_file, target_duration=30, output_dir="output/transcriptions", narration_language=None):
     """
     Step 3: Generate AI-powered recap suggestions using two focused LLM calls.
 
@@ -95,6 +95,10 @@ def generate_recap_suggestions(transcription_file, target_duration=30, output_di
              recap_text calibrated to the visual timeline.
 
     Accepts JSON (preferred) or legacy .txt transcription files.
+
+    Args:
+        narration_language: Language for the narration output (e.g. "Tamil").
+                            If None, narration is written in the same language as the transcript.
 
     Returns:
         Path to recap_data.json
@@ -206,6 +210,7 @@ Return JSON only — no explanation, no markdown fences:
     # CALL 2 — Narration
     # ------------------------------------------------------------------
     clip_summary = json.dumps(clip_timings, indent=2)
+    lang_label = narration_language or "the same language as the transcript"
     narr_system = (
         "You are a professional scriptwriter for video narrations. You write "
         "tight, speech-ready voiceover copy that matches a given clip timeline. "
@@ -222,14 +227,15 @@ Write a cohesive voiceover narration for this clip timeline.
 
 RULES:
 1. About {narration_word_target} spoken words (stay within {narration_word_min}-{narration_word_max} words).
-2. The narration must feel natural when played over the selected clips in order.
-3. Account for transitions between clips — smooth bridges, not abrupt topic jumps.
-4. Do not add filler silence or padding instructions — write tight, speech-ready copy only.
-5. Never reference transcription quality, errors, or technical issues.
+2. Write the narration ENTIRELY in {lang_label}. Do not mix languages.
+3. The narration must feel natural when played over the selected clips in order.
+4. Account for transitions between clips — smooth bridges, not abrupt topic jumps.
+5. Do not add filler silence or padding instructions — write tight, speech-ready copy only.
+6. Never reference transcription quality, errors, or technical issues.
 
 Return JSON only:
 {{
-  "recap_text": "<your narration>"
+  "recap_text": "<your narration in {lang_label}>"
 }}"""
 
     print("[Call 2] Writing narration...")

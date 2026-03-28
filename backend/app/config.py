@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     ENABLE_API_KEYS_MENU: bool = True
     ENABLE_BILLING: bool = False
     BILLING_DISABLED_MESSAGE: str = "Billing is not available yet. All features are currently free."
+    ENABLE_TRANSLATION: bool = False
 
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]

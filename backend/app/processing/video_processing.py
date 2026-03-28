@@ -24,6 +24,7 @@ def generate_recap_service(
     transcription_file: str,
     working_dir: str,
     target_duration: int = 30,
+    narration_language: str | None = None,
     progress_callback: Callable | None = None,
 ) -> dict:
     """Wrap modules.video_processing.generate_recap_suggestions."""
@@ -36,6 +37,7 @@ def generate_recap_service(
             transcription_file,
             target_duration=target_duration,
             output_dir="output/transcriptions",
+            narration_language=narration_language,
         )
         if progress_callback:
             progress_callback(step=3, message="Recap suggestions generated")

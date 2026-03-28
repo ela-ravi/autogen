@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Globe } from "lucide-react";
 import type { JobConfig } from "@/lib/types";
 
 interface UploadFormProps {
@@ -14,6 +15,8 @@ export function UploadForm({ onSubmit, disabled }: UploadFormProps) {
   const [language, setLanguage] = useState("");
   const [translateTo, setTranslateTo] = useState("");
 
+  const translationEnabled = typeof window !== "undefined" && window.__meta__?.enable_translation === true;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
@@ -21,8 +24,8 @@ export function UploadForm({ onSubmit, disabled }: UploadFormProps) {
       whisper_model: "small",
       tts_voice: voice,
       tts_model: "tts-1",
-      language: language || undefined,
-      translate_to: translateTo || undefined,
+      language: translationEnabled ? language || undefined : "en",
+      translate_to: translationEnabled ? translateTo || undefined : undefined,
       pad_with_black: false,
     });
   };
@@ -60,30 +63,47 @@ export function UploadForm({ onSubmit, disabled }: UploadFormProps) {
           <option value="shimmer">Shimmer</option>
         </select>
       </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium">
-          Source Language (optional)
-        </label>
-        <input
-          type="text"
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          placeholder="Auto-detect"
-          className="w-full rounded-md border px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium">
-          Translate to (optional)
-        </label>
-        <input
-          type="text"
-          value={translateTo}
-          onChange={(e) => setTranslateTo(e.target.value)}
-          placeholder="e.g. English"
-          className="w-full rounded-md border px-3 py-2 text-sm"
-        />
-      </div>
+      {translationEnabled ? (
+        <>
+          <div>
+            <label className="mb-1 block text-sm font-medium">
+              Source Language (optional)
+            </label>
+            <input
+              type="text"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              placeholder="Auto-detect"
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">
+              Translate to (optional)
+            </label>
+            <input
+              type="text"
+              value={translateTo}
+              onChange={(e) => setTranslateTo(e.target.value)}
+              placeholder="e.g. Tamil"
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            />
+          </div>
+        </>
+      ) : (
+        <div className="rounded-md border border-dashed border-muted-foreground/30 bg-muted/40 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Globe className="h-4 w-4" />
+            Language Support
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Currently supports <span className="font-medium text-foreground">English</span> videos with English narration.
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground/70">
+            Multi-language support &amp; translation coming soon.
+          </p>
+        </div>
+      )}
       <button
         type="submit"
         disabled={disabled}
