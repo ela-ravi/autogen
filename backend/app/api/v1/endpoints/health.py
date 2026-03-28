@@ -60,4 +60,5 @@ async def app_meta():
         "enable_api_keys_menu": settings.ENABLE_API_KEYS_MENU,
         "enable_billing": settings.ENABLE_BILLING,
         "billing_disabled_message": settings.BILLING_DISABLED_MESSAGE if not settings.ENABLE_BILLING else None,
+        "google_client_id": settings.GOOGLE_CLIENT_ID or None,
     }

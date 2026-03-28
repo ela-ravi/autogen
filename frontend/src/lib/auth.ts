@@ -16,6 +16,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, fullName: string) => Promise<void>;
+  googleLogin: (credential: string) => Promise<void>;
   logout: () => void;
   setTokens: (tokens: TokenResponse) => void;
 }
@@ -25,6 +26,7 @@ export const AuthContext = createContext<AuthContextType>({
   loading: true,
   login: async () => {},
   signup: async () => {},
+  googleLogin: async () => {},
   logout: () => {},
   setTokens: () => {},
 });
@@ -85,11 +87,19 @@ export function useAuthProvider() {
     await fetchUser();
   };
 
+  const googleLogin = async (credential: string) => {
+    const { data } = await api.post<TokenResponse>("/auth/google", {
+      token: credential,
+    });
+    setTokens(data);
+    await fetchUser();
+  };
+
   const logout = () => {
     Cookies.remove("access_token");
     Cookies.remove("refresh_token");
     setUser(null);
   };
 
-  return { user, loading, login, signup, logout, setTokens };
+  return { user, loading, login, signup, googleLogin, logout, setTokens };
 }

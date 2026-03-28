@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import "./globals.css";
 import { AuthContext, useAuthProvider } from "@/lib/auth";
 import api from "@/lib/api";
+import { AppMetaContext } from "@/lib/app-meta-context";
 import { Toaster } from "sonner";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 
 declare global {
   interface Window {
@@ -15,6 +17,7 @@ declare global {
       enable_api_keys_menu: boolean;
       enable_billing: boolean;
       billing_disabled_message: string | null;
+      google_client_id: string | null;
     };
   }
 }
@@ -25,23 +28,44 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const auth = useAuthProvider();
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const [appMeta, setAppMeta] = useState({ google_client_id: null as string | null });
 
   useEffect(() => {
     api
       .get("/meta")
       .then((res) => {
         window.__meta__ = res.data;
+        const raw = res.data.google_client_id;
+        const gid =
+          typeof raw === "string" && raw.trim() ? raw.trim() : null;
+        setAppMeta({ google_client_id: gid });
+        if (gid) {
+          setGoogleClientId(gid);
+        }
       })
       .catch(() => {});
   }, []);
 
+  const content = (
+    <AppMetaContext.Provider value={appMeta}>
+      <AuthContext.Provider value={auth}>
+        {children}
+        <Toaster position="top-right" />
+      </AuthContext.Provider>
+    </AppMetaContext.Provider>
+  );
+
   return (
     <html lang="en">
       <body className="min-h-screen antialiased">
-        <AuthContext.Provider value={auth}>
-          {children}
-          <Toaster position="top-right" />
-        </AuthContext.Provider>
+        {googleClientId ? (
+          <GoogleOAuthProvider clientId={googleClientId}>
+            {content}
+          </GoogleOAuthProvider>
+        ) : (
+          content
+        )}
       </body>
     </html>
   );
