@@ -192,7 +192,8 @@ def translate_transcription(input_file, source_lang, target_lang, output_dir="ou
     print(f"Input: {input_file}")
     print(f"Translation: {source_lang} → {target_lang}")
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), max_retries=5)
+    model_name = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Read segments — support both JSON and legacy .txt
     if input_file.endswith(".json"):
@@ -215,20 +216,52 @@ def translate_transcription(input_file, source_lang, target_lang, output_dir="ou
                     except (ValueError, IndexError):
                         continue
 
-    # Translate each segment's text
-    for i, seg in enumerate(segments, 1):
-        print(f"Translating segment {i}/{len(segments)}...", end="\r")
-        response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
-            messages=[
-                {"role": "system", "content": "You are a professional translator."},
-                {"role": "user", "content": f"Translate this {source_lang} text to {target_lang}: {seg['text']}"},
-            ],
-            max_tokens=500,
-        )
-        seg["text"] = response.choices[0].message.content if response.choices else seg["text"]
+    # Batch-translate segments to reduce API calls and token usage.
+    # Each batch sends a numbered list; the LLM returns translations
+    # in the same numbered order.
+    BATCH_SIZE = 15
+    total = len(segments)
+    for batch_start in range(0, total, BATCH_SIZE):
+        batch_end = min(batch_start + BATCH_SIZE, total)
+        batch = segments[batch_start:batch_end]
+        print(f"Translating segments {batch_start + 1}-{batch_end}/{total}...")
 
-    print()  # newline after progress
+        numbered_lines = "\n".join(
+            f"{i+1}. {seg['text']}" for i, seg in enumerate(batch)
+        )
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": (
+                    "You are a professional translator. You will receive numbered lines. "
+                    "Translate each line and return ONLY the translated lines in the same "
+                    "numbered format (e.g. '1. translated text'). Preserve the numbering "
+                    "exactly. Do not add explanations."
+                )},
+                {"role": "user", "content": (
+                    f"Translate each line from {source_lang} to {target_lang}:\n\n{numbered_lines}"
+                )},
+            ],
+            max_tokens=3000,
+        )
+        result_text = response.choices[0].message.content or ""
+
+        translated = {}
+        for line in result_text.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            dot_idx = line.find(".")
+            if dot_idx > 0:
+                try:
+                    num = int(line[:dot_idx].strip())
+                    translated[num] = line[dot_idx + 1:].strip()
+                except ValueError:
+                    continue
+
+        for i, seg in enumerate(batch):
+            if (i + 1) in translated:
+                seg["text"] = translated[i + 1]
 
     # Save as JSON
     output_path = get_output_path(output_dir)

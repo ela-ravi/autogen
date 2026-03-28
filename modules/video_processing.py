@@ -115,7 +115,7 @@ def generate_recap_suggestions(transcription_file, target_duration=30, output_di
 
     transcript_json = json.dumps(segments, indent=2)
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), max_retries=5)
     model_name = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     narration_word_target = max(35, min(220, round(target_duration * 2.0)))

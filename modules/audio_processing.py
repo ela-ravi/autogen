@@ -52,7 +52,7 @@ def generate_tts_audio(recap_text_file, target_duration=30, output_dir="output/a
     print(f"Target duration: {target_duration}s")
     
     # Initialize OpenAI client
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), max_retries=5)
     
     # Prepare output path
     output_path = get_output_path(output_dir)
