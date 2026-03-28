@@ -44,6 +44,7 @@ env/
 # Celery
 celerybeat-schedule
 celerybeat-schedule.db
+**/celerybeat-schedule
 
 # Testing
 .pytest_cache/
