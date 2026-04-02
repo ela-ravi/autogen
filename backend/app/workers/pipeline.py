@@ -259,6 +259,37 @@ class RecapPipeline:
             else:
                 self.progress.report(6, "Audio removal (cached)", 1.0)
 
+            # Pre-merge timing summary
+            try:
+                from moviepy.editor import VideoFileClip as _VFC
+                _probe = _VFC(no_audio_video)
+                merged_clip_duration = _probe.duration
+                _probe.close()
+            except Exception:
+                merged_clip_duration = None
+
+            logger.info(
+                "Pre-merge summary for job %s | "
+                "TTS audio: %.1fs | Merged clips: %s | "
+                "Target: %ds | Clip trim target: %.1fs | Trim cap: %.1fs",
+                self.job_id,
+                actual_audio_duration or 0,
+                f"{merged_clip_duration:.1f}s" if merged_clip_duration else "unknown",
+                target_duration,
+                clip_trim_target,
+                user_trim_cap,
+            )
+            if settings.DEBUG:
+                logger.info(
+                    "DEBUG timing detail for job %s | "
+                    "audio_longer_than_video=%s | audio_longer_than_target=%s | "
+                    "video_longer_than_target=%s",
+                    self.job_id,
+                    (actual_audio_duration or 0) > (merged_clip_duration or 0),
+                    (actual_audio_duration or 0) > target_duration,
+                    (merged_clip_duration or 0) > target_duration,
+                )
+
             # Step 7: Merge audio + video
             self._update_job(current_step=7, current_step_name="Merging final video")
             self.progress.report(7, "Merging audio with video...", 0.0)

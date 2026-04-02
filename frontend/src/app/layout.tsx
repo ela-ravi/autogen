@@ -19,6 +19,7 @@ declare global {
       billing_disabled_message: string | null;
       google_client_id: string | null;
       enable_translation: boolean;
+      debug: boolean;
     };
   }
 }

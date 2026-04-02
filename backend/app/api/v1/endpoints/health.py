@@ -62,4 +62,5 @@ async def app_meta():
         "billing_disabled_message": settings.BILLING_DISABLED_MESSAGE if not settings.ENABLE_BILLING else None,
         "google_client_id": settings.GOOGLE_CLIENT_ID or None,
         "enable_translation": settings.ENABLE_TRANSLATION,
+        "debug": settings.DEBUG,
     }

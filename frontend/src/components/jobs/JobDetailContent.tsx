@@ -94,6 +94,8 @@ export function JobDetailContent({
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activityLog]);
 
+  const isDebug = typeof window !== "undefined" && window.__meta__?.debug === true;
+
   const handleDownload = async () => {
     try {
       const response = await api.get(`/jobs/${jobId}/download`, { responseType: "blob" });
@@ -108,6 +110,23 @@ export function JobDetailContent({
       URL.revokeObjectURL(url);
     } catch {
       toast.error("Download not available");
+    }
+  };
+
+  const handleDownloadNarration = async () => {
+    try {
+      const response = await api.get(`/jobs/${jobId}/debug/narration`, { responseType: "blob" });
+      const disposition = response.headers["content-disposition"] || "";
+      const match = disposition.match(/filename="?(.+?)"?$/);
+      const filename = match?.[1] || "narration.mp3";
+      const url = URL.createObjectURL(response.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Narration audio not available");
     }
   };
 
@@ -205,6 +224,16 @@ export function JobDetailContent({
             >
               <Download className="h-4 w-4" />
               Download
+            </button>
+          )}
+          {job.status === "completed" && isDebug && (
+            <button
+              type="button"
+              onClick={handleDownloadNarration}
+              className="flex items-center gap-1 rounded-md border border-primary/30 px-3 py-2 text-sm text-primary hover:bg-primary/10 sm:px-4"
+            >
+              <Download className="h-4 w-4" />
+              Narration
             </button>
           )}
           <button

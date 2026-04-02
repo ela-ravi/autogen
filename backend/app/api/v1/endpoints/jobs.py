@@ -180,6 +180,39 @@ async def resume_job(
     return job_to_response(job)
 
 
+@router.get("/{job_id}/debug/narration")
+async def download_narration_audio(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Download the TTS narration audio separately. Only available when DEBUG=true."""
+    from app.config import settings as app_settings
+    if not app_settings.DEBUG:
+        raise HTTPException(status_code=404, detail="Debug endpoints are disabled")
+
+    job = await job_service.get_job(db, job_id, current_user.id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    tts_key = (job.intermediate_keys or {}).get("tts_audio")
+    if not tts_key:
+        raise HTTPException(status_code=404, detail="Narration audio not available for this job")
+
+    filename = job.original_filename.rsplit(".", 1)[0] + "_narration.mp3"
+
+    def stream():
+        body = storage.client.get_object(Bucket=storage.bucket, Key=tts_key)["Body"]
+        for chunk in body.iter_chunks(chunk_size=1024 * 1024):
+            yield chunk
+
+    return StreamingResponse(
+        stream(),
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job(
     job_id: str,
