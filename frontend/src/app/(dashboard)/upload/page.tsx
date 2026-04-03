@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileVideo, CheckCircle2, X } from "lucide-react";
+import { FileVideo, CheckCircle2, X, Info } from "lucide-react";
 import { DropZone } from "@/components/upload/DropZone";
 import { UploadForm } from "@/components/upload/UploadForm";
 import { useUpload } from "@/hooks/useUpload";
@@ -120,7 +120,14 @@ export default function UploadPage() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold">Upload Video</h2>
+      <h2 className="mb-4 text-2xl font-bold">Upload Video</h2>
+      <div className="mb-6 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/40">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <p className="text-sm text-amber-900 dark:text-amber-100">
+          This tool works best with videos that have clear spoken dialogue or narration.
+          Videos that rely on visuals, music, or emotions without descriptive audio may not produce accurate recaps.
+        </p>
+      </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
           {!hasUpload && (
