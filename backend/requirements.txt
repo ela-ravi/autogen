@@ -39,7 +39,7 @@ pydub==0.25.1
 cryptography>=42.0.0
 
 # Email
-resend==2.5.0
+resend==2.27.0
 
 # Utils
 python-dotenv==1.0.1
