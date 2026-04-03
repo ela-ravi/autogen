@@ -228,9 +228,10 @@ class RecapPipeline:
             #   (better to have extra silent video than to throw away the user's
             #   target because the narration underproduced)
             overshoot = 5
+            audio_pad = 1  # extra second so narration audio isn't clipped at the end
             user_trim_cap = target_duration + overshoot
             _ad = actual_audio_duration if actual_audio_duration is not None else float(target_duration)
-            clip_trim_target = max(float(target_duration), min(user_trim_cap, _ad + overshoot))
+            clip_trim_target = max(float(target_duration), min(user_trim_cap, _ad + overshoot + audio_pad))
 
             if resume_from_step <= 5:
                 self._update_job(current_step=5, current_step_name="Extracting clips")
