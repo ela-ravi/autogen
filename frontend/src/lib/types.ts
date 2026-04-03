@@ -17,6 +17,13 @@ export interface TokenResponse {
   access_token: string;
   refresh_token: string;
   token_type: string;
+  accounts_linked?: boolean;
+}
+
+export interface SignupResponse {
+  message: string;
+  email: string;
+  requires_verification: boolean;
 }
 
 export interface JobConfig {

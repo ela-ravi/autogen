@@ -21,8 +21,14 @@ export function LoginForm() {
     try {
       await login(email, password);
       router.push("/dashboard");
-    } catch {
-      toast.error("Invalid email or password");
+    } catch (err: unknown) {
+      const resp = (err as { response?: { status?: number; data?: { detail?: string } } })?.response;
+      if (resp?.status === 403) {
+        toast.info(resp.data?.detail || "Please verify your email");
+        router.push(`/verify?email=${encodeURIComponent(email)}`);
+      } else {
+        toast.error("Invalid email or password");
+      }
     } finally {
       setLoading(false);
     }
@@ -32,7 +38,10 @@ export function LoginForm() {
     if (!credentialResponse.credential) return;
     setLoading(true);
     try {
-      await googleLogin(credentialResponse.credential);
+      const res = await googleLogin(credentialResponse.credential);
+      if (res.accounts_linked) {
+        toast.success("Google account linked to your existing account. You can now use either method to sign in.");
+      }
       router.push("/dashboard");
     } catch {
       toast.error("Google sign-in failed");
@@ -43,28 +52,6 @@ export function LoginForm() {
 
   return (
     <div className="space-y-4">
-      {googleClientId && (
-        <>
-          <div className="flex justify-center">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => toast.error("Google sign-in failed")}
-              width="100%"
-              text="signin_with"
-              shape="rectangular"
-              theme="outline"
-            />
-          </div>
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">or</span>
-            </div>
-          </div>
-        </>
-      )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium">Email</label>
@@ -95,6 +82,28 @@ export function LoginForm() {
           {loading ? "Signing in..." : "Sign in"}
         </button>
       </form>
+      {googleClientId && (
+        <>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">or</span>
+            </div>
+          </div>
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => toast.error("Google sign-in failed")}
+              width="100%"
+              text="signin_with"
+              shape="rectangular"
+              theme="outline"
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

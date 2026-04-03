@@ -26,6 +26,7 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    accounts_linked: bool = False
 
 
 class UserResponse(BaseModel):
@@ -60,3 +61,18 @@ class FeatureFlagsResponse(BaseModel):
 
 class OpenAIKeyRequest(BaseModel):
     openai_api_key: str
+
+
+class OTPVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+
+class OTPResendRequest(BaseModel):
+    email: EmailStr
+
+
+class SignupResponse(BaseModel):
+    message: str
+    email: str
+    requires_verification: bool = True

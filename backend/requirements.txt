@@ -38,6 +38,9 @@ pydub==0.25.1
 # Encryption
 cryptography>=42.0.0
 
+# Email
+resend==2.5.0
+
 # Utils
 python-dotenv==1.0.1
 structlog==24.4.0

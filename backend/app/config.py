@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     BILLING_DISABLED_MESSAGE: str = "Billing is not available yet. All features are currently free."
     ENABLE_TRANSLATION: bool = False
 
+    # Email (Resend)
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "Video Recap <noreply@hallucinotai.com>"
+    OTP_EXPIRY_MINUTES: int = 10
+
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 

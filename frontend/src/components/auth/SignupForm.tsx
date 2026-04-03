@@ -26,9 +26,11 @@ export function SignupForm() {
     setLoading(true);
     try {
       await signup(email, password, fullName);
-      router.push("/dashboard");
-    } catch {
-      toast.error("Signup failed. Email may already be registered.");
+      toast.success("Verification code sent to your email");
+      router.push(`/verify?email=${encodeURIComponent(email)}`);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || "Signup failed");
     } finally {
       setLoading(false);
     }
@@ -38,7 +40,10 @@ export function SignupForm() {
     if (!credentialResponse.credential) return;
     setLoading(true);
     try {
-      await googleLogin(credentialResponse.credential);
+      const res = await googleLogin(credentialResponse.credential);
+      if (res.accounts_linked) {
+        toast.success("Google account linked to your existing account. You can now use either method to sign in.");
+      }
       router.push("/dashboard");
     } catch {
       toast.error("Google sign-up failed");
@@ -49,28 +54,6 @@ export function SignupForm() {
 
   return (
     <div className="space-y-4">
-      {googleClientId && (
-        <>
-          <div className="flex justify-center">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => toast.error("Google sign-up failed")}
-              width="100%"
-              text="signup_with"
-              shape="rectangular"
-              theme="outline"
-            />
-          </div>
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">or</span>
-            </div>
-          </div>
-        </>
-      )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium">Full Name</label>
@@ -121,6 +104,28 @@ export function SignupForm() {
           {loading ? "Creating account..." : "Create account"}
         </button>
       </form>
+      {googleClientId && (
+        <>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">or</span>
+            </div>
+          </div>
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => toast.error("Google sign-up failed")}
+              width="100%"
+              text="signup_with"
+              shape="rectangular"
+              theme="outline"
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -1,3 +1,6 @@
+import secrets
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,19 +18,54 @@ def user_requires_api_key(email: str) -> bool:
     return email in settings.API_KEY_ALLOWED_EMAILS
 
 
+def generate_otp() -> str:
+    return f"{secrets.randbelow(900000) + 100000}"
+
+
 async def create_user(
     db: AsyncSession, email: str, password: str, full_name: str
 ) -> User:
+    otp = generate_otp()
     user = User(
         email=email,
         hashed_password=hash_password(password),
         full_name=full_name,
         auth_provider="local",
+        email_verified=False,
+        otp_code=otp,
+        otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRY_MINUTES),
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
     return user
+
+
+async def verify_otp(db: AsyncSession, email: str, code: str) -> User | None:
+    user = await get_by_email(db, email)
+    if not user or not user.otp_code:
+        return None
+    if user.otp_code != code:
+        return None
+    if user.otp_expires_at and datetime.now(timezone.utc) > user.otp_expires_at.replace(tzinfo=timezone.utc if user.otp_expires_at.tzinfo is None else user.otp_expires_at.tzinfo):
+        return None
+    user.email_verified = True
+    user.otp_code = None
+    user.otp_expires_at = None
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def resend_otp(db: AsyncSession, email: str) -> str | None:
+    user = await get_by_email(db, email)
+    if not user or user.email_verified:
+        return None
+    otp = generate_otp()
+    user.otp_code = otp
+    user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRY_MINUTES)
+    await db.commit()
+    return otp
 
 
 async def authenticate_user(
@@ -58,30 +96,36 @@ async def get_by_google_id(db: AsyncSession, google_id: str) -> User | None:
 
 async def get_or_create_google_user(
     db: AsyncSession, google_id: str, email: str, full_name: str
-) -> User:
+) -> tuple[User, bool]:
+    """Returns (user, was_linked) — was_linked is True when an existing
+    email-only account was linked to Google for the first time."""
     user = await get_by_google_id(db, google_id)
     if user:
-        return user
+        return user, False
 
-    # Check if email exists (link accounts)
     user = await get_by_email(db, email)
     if user:
         user.google_id = google_id
-        user.auth_provider = "google"
+        user.email_verified = True
+        user.otp_code = None
+        user.otp_expires_at = None
+        if user.auth_provider == "local":
+            user.auth_provider = "both"
         await db.commit()
         await db.refresh(user)
-        return user
+        return user, True
 
     user = User(
         email=email,
         full_name=full_name,
         auth_provider="google",
         google_id=google_id,
+        email_verified=True,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    return user
+    return user, False
 
 
 async def update_openai_key(db: AsyncSession, user_id: str, plain_key: str) -> None:

@@ -10,27 +10,52 @@ from app.schemas.auth import (
     GoogleAuthRequest,
     LoginRequest,
     OpenAIKeyRequest,
+    OTPResendRequest,
+    OTPVerifyRequest,
     RefreshRequest,
     SignupRequest,
+    SignupResponse,
     TokenResponse,
     UserResponse,
 )
 from app.services import user_service
+from app.services.email_service import send_otp_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED)
 async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
     existing = await user_service.get_by_email(db, body.email)
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user = await user_service.create_user(db, body.email, body.password, body.full_name)
+    send_otp_email(user.email, user.otp_code)
+    return SignupResponse(
+        message="Verification code sent to your email",
+        email=user.email,
+    )
+
+
+@router.post("/verify-otp", response_model=TokenResponse)
+async def verify_otp(body: OTPVerifyRequest, db: AsyncSession = Depends(get_db)):
+    user = await user_service.verify_otp(db, body.email, body.code)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
     return TokenResponse(
         access_token=create_access_token(user.id),
         refresh_token=create_refresh_token(user.id),
     )
+
+
+@router.post("/resend-otp")
+async def resend_otp(body: OTPResendRequest, db: AsyncSession = Depends(get_db)):
+    otp = await user_service.resend_otp(db, body.email)
+    if not otp:
+        raise HTTPException(status_code=400, detail="Account not found or already verified")
+    send_otp_email(body.email, otp)
+    return {"message": "Verification code sent"}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -38,6 +63,11 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = await user_service.authenticate_user(db, body.email, body.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not user.email_verified:
+        otp = await user_service.resend_otp(db, body.email)
+        if otp:
+            send_otp_email(body.email, otp)
+        raise HTTPException(status_code=403, detail="Email not verified. A new code has been sent to your email.")
     return TokenResponse(
         access_token=create_access_token(user.id),
         refresh_token=create_refresh_token(user.id),
@@ -71,12 +101,13 @@ async def google_auth(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db
     except GoogleOAuthError as e:
         raise HTTPException(status_code=401, detail=str(e))
 
-    user = await user_service.get_or_create_google_user(
+    user, was_linked = await user_service.get_or_create_google_user(
         db, google_user["sub"], google_user["email"], google_user["name"]
     )
     return TokenResponse(
         access_token=create_access_token(user.id),
         refresh_token=create_refresh_token(user.id),
+        accounts_linked=was_linked,
     )
 
 

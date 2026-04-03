@@ -9,14 +9,16 @@ import {
 } from "react";
 import Cookies from "js-cookie";
 import api from "./api";
-import type { User, TokenResponse } from "./types";
+import type { User, TokenResponse, SignupResponse } from "./types";
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, fullName: string) => Promise<void>;
-  googleLogin: (credential: string) => Promise<void>;
+  signup: (email: string, password: string, fullName: string) => Promise<SignupResponse>;
+  verifyOtp: (email: string, code: string) => Promise<void>;
+  resendOtp: (email: string) => Promise<void>;
+  googleLogin: (credential: string) => Promise<TokenResponse>;
   logout: () => void;
   setTokens: (tokens: TokenResponse) => void;
 }
@@ -25,8 +27,10 @@ export const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   login: async () => {},
-  signup: async () => {},
-  googleLogin: async () => {},
+  signup: async () => ({ message: "", email: "", requires_verification: true }),
+  verifyOtp: async () => {},
+  resendOtp: async () => {},
+  googleLogin: async () => ({} as TokenResponse),
   logout: () => {},
   setTokens: () => {},
 });
@@ -77,22 +81,35 @@ export function useAuthProvider() {
     email: string,
     password: string,
     fullName: string
-  ) => {
-    const { data } = await api.post<TokenResponse>("/auth/signup", {
+  ): Promise<SignupResponse> => {
+    const { data } = await api.post<SignupResponse>("/auth/signup", {
       email,
       password,
       full_name: fullName,
+    });
+    return data;
+  };
+
+  const verifyOtp = async (email: string, code: string) => {
+    const { data } = await api.post<TokenResponse>("/auth/verify-otp", {
+      email,
+      code,
     });
     setTokens(data);
     await fetchUser();
   };
 
-  const googleLogin = async (credential: string) => {
+  const resendOtp = async (email: string) => {
+    await api.post("/auth/resend-otp", { email });
+  };
+
+  const googleLogin = async (credential: string): Promise<TokenResponse> => {
     const { data } = await api.post<TokenResponse>("/auth/google", {
       token: credential,
     });
     setTokens(data);
     await fetchUser();
+    return data;
   };
 
   const logout = () => {
@@ -101,5 +118,5 @@ export function useAuthProvider() {
     setUser(null);
   };
 
-  return { user, loading, login, signup, googleLogin, logout, setTokens };
+  return { user, loading, login, signup, verifyOtp, resendOtp, googleLogin, logout, setTokens };
 }
