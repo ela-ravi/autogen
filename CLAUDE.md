@@ -421,6 +421,7 @@ See `DEPLOYMENT.md` for detailed procedures.
 ## 📚 Reference Documents
 
 - **CODEBASE_Q&A.md** - Comprehensive Q&A documenting pipeline mechanics, edge cases, and improvement areas (12 questions with detailed answers and implementation suggestions)
+- **AUDIO_EMOTIONS_PHASE1.md** - Complete Phase 1 implementation guide for audio emotion detection using Google Cloud Speech API (setup, code structure, integration, testing, costs)
 
 ---
 
