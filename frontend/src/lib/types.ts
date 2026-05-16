@@ -34,6 +34,7 @@ export interface JobConfig {
   language?: string;
   translate_to?: string;
   pad_with_black: boolean;
+  include_emotions?: boolean;
 }
 
 export interface Job {
@@ -52,6 +53,7 @@ export interface Job {
   completed_at: string | null;
   expires_at: string | null;
   has_original_in_storage: boolean;
+  keep_original_video?: boolean | null;
 }
 
 export interface JobListResponse {

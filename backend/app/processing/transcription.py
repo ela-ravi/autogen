@@ -27,34 +27,52 @@ def transcribe_video_service(
     working_dir: str,
     model_size: str = "small",
     language: str | None = None,
+    include_emotions: bool = False,
     progress_callback: Callable | None = None,
 ) -> dict:
-    """Wrap modules.transcription.transcribe_video with path isolation."""
+    """Wrap modules.transcription.transcribe_with_optional_emotions with path isolation.
+
+    Args:
+        include_emotions: If True, performs emotion analysis (PREMIUM tier).
+                         If False, transcription only (BASIC/FREE tier).
+
+    Returns:
+        {"transcription_file": path, "emotions_file": path_or_none}
+    """
     from modules.transcription import (
         is_whisper_model_cached,
         sync_whisper_cache_invalidation,
-        transcribe_video,
+        transcribe_with_optional_emotions,
     )
 
     with patched_module_paths(working_dir):
         sync_whisper_cache_invalidation(settings.REDIS_URL)
         if progress_callback:
+            tier = "PREMIUM (with emotion analysis)" if include_emotions else "BASIC (transcription only)"
             if is_whisper_model_cached(model_size):
-                progress_callback(step=1, message="Transcribing (Whisper model already loaded)…")
+                progress_callback(step=1, message=f"Transcribing [{tier}] (Whisper model already loaded)…")
             else:
                 progress_callback(
                     step=1,
-                    message="Loading Whisper model (first job on this worker), then transcribing…",
+                    message=f"Loading Whisper model (first job on this worker), then transcribing [{tier}]…",
                 )
-        result_path = transcribe_video(
+
+        transcription_file, emotions_file = transcribe_with_optional_emotions(
             video_path,
             output_dir="output/transcriptions",
             model_size=model_size,
             language=language,
+            include_emotions=include_emotions,
         )
+
         if progress_callback:
-            progress_callback(step=1, message="Transcription complete")
-        return {"transcription_file": result_path}
+            msg = "Transcription + emotion analysis complete" if include_emotions else "Transcription complete"
+            progress_callback(step=1, message=msg)
+
+        return {
+            "transcription_file": transcription_file,
+            "emotions_file": emotions_file,
+        }
 
 
 def translate_transcription_service(

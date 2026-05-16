@@ -14,6 +14,7 @@ export function UploadForm({ onSubmit, disabled }: UploadFormProps) {
   const [voice, setVoice] = useState("nova");
   const [language, setLanguage] = useState("");
   const [translateTo, setTranslateTo] = useState("");
+  const [includeEmotions, setIncludeEmotions] = useState(false);
 
   const translationEnabled = typeof window !== "undefined" && window.__meta__?.enable_translation === true;
 
@@ -27,6 +28,7 @@ export function UploadForm({ onSubmit, disabled }: UploadFormProps) {
       language: translationEnabled ? language || undefined : "en",
       translate_to: translationEnabled ? translateTo || undefined : undefined,
       pad_with_black: false,
+      include_emotions: includeEmotions,
     });
   };
 
@@ -62,6 +64,24 @@ export function UploadForm({ onSubmit, disabled }: UploadFormProps) {
           <option value="nova">Nova</option>
           <option value="shimmer">Shimmer</option>
         </select>
+      </div>
+      <div className="rounded-md border border-blue-200 bg-blue-50 p-4">
+        <label className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={includeEmotions}
+            onChange={(e) => setIncludeEmotions(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          <div className="flex-1">
+            <div className="font-medium text-sm text-blue-900">
+              ✨ Include Emotion Analysis (Premium)
+            </div>
+            <div className="text-xs text-blue-700 mt-1">
+              Analyzes speaker emotions to improve clip selection and narration tone. Adds ~5-8 seconds processing time.
+            </div>
+          </div>
+        </label>
       </div>
       {translationEnabled ? (
         <>

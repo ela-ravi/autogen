@@ -15,6 +15,7 @@ class JobConfig(BaseModel):
     language: str | None = None
     translate_to: str | None = None
     pad_with_black: bool = False
+    include_emotions: bool = False  # Premium tier: emotion analysis from audio
 
 
 class CreateJobRequest(BaseModel):
@@ -41,6 +42,7 @@ class JobResponse(BaseModel):
     completed_at: datetime | None
     expires_at: datetime | None
     has_original_in_storage: bool
+    keep_original_video: bool | None = None
 
     model_config = {"from_attributes": True}
 

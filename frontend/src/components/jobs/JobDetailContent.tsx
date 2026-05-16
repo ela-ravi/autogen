@@ -40,6 +40,8 @@ export function JobDetailContent({
   const [activityLog, setActivityLog] = useState<
     { time: string; message: string; step: number }[]
   >([]);
+  const [showVideoConfirmation, setShowVideoConfirmation] = useState(false);
+  const [confirmingVideo, setConfirmingVideo] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
   const inputRemovalToastRef = useRef(false);
   const { getJob, deleteJob, resumeJob, stopJob } = useJobs();
@@ -51,6 +53,23 @@ export function JobDetailContent({
   const fetchJob = useCallback(async () => {
     const data = await getJob(jobId);
     setJob(data);
+
+    // Log emotion analysis metrics when job completes
+    if (data.status === "completed" && data.config?.include_emotions) {
+      console.log("🎬 JOB COMPLETED - EMOTION ANALYSIS METRICS:", {
+        jobId: data.id,
+        tier: "PREMIUM (with emotion analysis)",
+        config: data.config,
+        status: data.status,
+      });
+    } else if (data.status === "completed") {
+      console.log("🎬 JOB COMPLETED - BASIC TIER:", {
+        jobId: data.id,
+        tier: "BASIC (no emotion analysis)",
+        config: data.config,
+        status: data.status,
+      });
+    }
   }, [jobId, getJob]);
 
   useEffect(() => {
@@ -68,12 +87,25 @@ export function JobDetailContent({
     if (progress?.message) {
       const msg = progress.message;
       const step = progress.step ?? 0;
+
+      // Log emotion-related progress
+      if (msg.includes("PREMIUM") || msg.includes("emotion")) {
+        console.log(`📊 [Step ${step}] ${msg}`);
+      }
+
       setActivityLog((prev) => {
         if (prev.length > 0 && prev[prev.length - 1].message === msg) return prev;
         return [...prev, { time: new Date().toLocaleTimeString(), message: msg, step }];
       });
     }
   }, [progress, fetchJob]);
+
+  // Show confirmation modal when job completes and user hasn't decided on original video
+  useEffect(() => {
+    if (job?.status === "completed" && job.keep_original_video === null && job.has_original_in_storage) {
+      setShowVideoConfirmation(true);
+    }
+  }, [job?.status, job?.keep_original_video, job?.has_original_in_storage]);
 
   useEffect(() => {
     if (
@@ -167,6 +199,26 @@ export function JobDetailContent({
       toast.error("Failed to stop job");
     } finally {
       setStopping(false);
+    }
+  };
+
+  const handleConfirmOriginalVideo = async (keepOriginal: boolean) => {
+    setConfirmingVideo(true);
+    try {
+      const response = await api.post(`/jobs/${jobId}/confirm-original-video`, {
+        keep_original: keepOriginal,
+      });
+      setJob(response.data);
+      setShowVideoConfirmation(false);
+      toast.success(
+        keepOriginal
+          ? "Original video will be kept in your account"
+          : "Original video has been deleted"
+      );
+    } catch {
+      toast.error("Failed to confirm video preference");
+    } finally {
+      setConfirmingVideo(false);
     }
   };
 
@@ -356,6 +408,69 @@ export function JobDetailContent({
         </div>
       )}
 
+      {/* Audio Emotion Analysis Status */}
+      {job && (
+        <div className="mb-6">
+          {job.config?.include_emotions ? (
+            <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 sm:p-6 dark:border-purple-900 dark:bg-purple-950/30">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-purple-500 text-white">
+                  <span className="text-xs font-bold">♫</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-purple-900 dark:text-purple-100">🎵 Audio Emotion Analysis</h3>
+                  <p className="mt-1 text-sm text-purple-800 dark:text-purple-200">
+                    {job.status === "completed" ? (
+                      <>
+                        ✓ <span className="font-medium">Emotion analysis completed (PREMIUM)</span>
+                        <br />
+                        <span className="text-xs text-purple-700 dark:text-purple-300">
+                          Speaker emotions detected and used for intelligent clip weighting
+                        </span>
+                      </>
+                    ) : job.status === "processing" || job.status === "pending" ? (
+                      <>
+                        ⏳ <span className="font-medium">Analyzing emotions in progress...</span>
+                        <br />
+                        <span className="text-xs text-purple-700 dark:text-purple-300">
+                          Processing speech tone, intensity, and emotional characteristics
+                        </span>
+                      </>
+                    ) : job.status === "failed" || job.status === "stopped" ? (
+                      <>
+                        ❌ <span className="font-medium text-red-600">Emotion analysis failed</span>
+                        <br />
+                        <span className="text-xs text-red-600 dark:text-red-400">
+                          Google Cloud Speech API may not be configured. Check system logs for details.
+                        </span>
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-6 dark:border-slate-800 dark:bg-slate-950/30">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-400 text-white">
+                  <span className="text-xs">—</span>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-slate-900 dark:text-slate-100">🎵 Audio Emotion Analysis</h3>
+                  <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
+                    Not enabled (BASIC tier)
+                    <br />
+                    <span className="text-xs text-slate-600 dark:text-slate-400">
+                      This job uses basic transcription only. Enable emotion analysis for premium features with better clip selection and narration tone matching.
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="rounded-lg border p-4 sm:p-6">
         <h3 className="mb-4 font-semibold">Details</h3>
         <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
@@ -391,6 +506,36 @@ export function JobDetailContent({
           </div>
         </dl>
       </div>
+
+      {/* Original Video Confirmation Modal */}
+      {showVideoConfirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 dark:bg-slate-900 shadow-xl">
+            <h3 className="text-lg font-bold">Keep Original Video?</h3>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Your recap is ready! Would you like to keep the original uploaded video in your account for future use, or delete it to save storage space?
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => handleConfirmOriginalVideo(true)}
+                disabled={confirmingVideo}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              >
+                {confirmingVideo ? "Saving..." : "Keep Original"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmOriginalVideo(false)}
+                disabled={confirmingVideo}
+                className="rounded-md border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary disabled:opacity-50"
+              >
+                {confirmingVideo ? "Deleting..." : "Delete Original"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

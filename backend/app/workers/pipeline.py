@@ -92,10 +92,12 @@ class RecapPipeline:
             translate_to = self.config.get("translate_to")
             tts_model = self.config.get("tts_model", "tts-1")
             tts_voice = self.config.get("tts_voice", "nova")
+            include_emotions = self.config.get("include_emotions", False)
 
             # --- Restore intermediates needed for resumption ---
             transcription_file = None
             active_transcription = None
+            emotions_file = None
             recap_data_file = None
             recap_text_file = os.path.join(working_dir, "output/transcriptions/recap_text.txt")
             tts_audio_file = None
@@ -113,6 +115,11 @@ class RecapPipeline:
                         intermediate_keys, "transcription",
                         os.path.join(working_dir, "output/transcriptions/transcription.json"))
                 transcription_file = active_transcription
+                # Also restore emotions if they were analyzed
+                if include_emotions and "emotions" in intermediate_keys:
+                    emotions_file = self._download_intermediate(
+                        intermediate_keys, "emotions",
+                        os.path.join(working_dir, "output/transcriptions/emotions.json"))
 
             if resume_from_step >= 4 and "recap_data" in intermediate_keys:
                 recap_data_file = self._download_intermediate(
@@ -148,18 +155,23 @@ class RecapPipeline:
             if resume_from_step > 0:
                 logger.info(f"Resuming job {self.job_id} from step {resume_from_step}")
 
-            # Step 1: Transcribe
+            # Step 1: Transcribe (+ emotions if PREMIUM tier)
             if resume_from_step <= 1:
                 self._update_job(current_step=1, current_step_name="Transcribing video")
                 self.progress.report(1, "Starting transcription...", 0.0)
                 result = transcribe_video_service(
                     local_video_path, working_dir,
                     model_size=model_size, language=language,
+                    include_emotions=include_emotions,
                     progress_callback=self._progress_callback,
                 )
                 transcription_file = result["transcription_file"]
+                emotions_file = result.get("emotions_file")  # None for BASIC tier, path for PREMIUM
                 active_transcription = transcription_file
                 self._upload_intermediate(intermediate_keys, "transcription", transcription_file)
+                if emotions_file:
+                    self._upload_intermediate(intermediate_keys, "emotions", emotions_file)
+                    logger.info(f"Emotion analysis completed: {emotions_file}")
                 self.progress.report(1, "Transcription complete", 1.0)
             else:
                 self.progress.report(1, "Transcription (cached)", 1.0)
@@ -183,7 +195,7 @@ class RecapPipeline:
             else:
                 self.progress.report(2, "Translation (cached)", 1.0)
 
-            # Step 3: Generate recap
+            # Step 3: Generate recap (with emotion weighting if PREMIUM tier)
             if resume_from_step <= 3:
                 self._update_job(current_step=3, current_step_name="Generating recap")
                 self.progress.report(3, "Generating recap suggestions...", 0.0)
@@ -191,10 +203,44 @@ class RecapPipeline:
                     active_transcription, working_dir,
                     target_duration=target_duration,
                     narration_language=translate_to,
+                    emotions_file=emotions_file,  # None for BASIC, path for PREMIUM
                     progress_callback=self._progress_callback,
                 )
                 recap_data_file = result["recap_data_file"]
                 self._upload_intermediate(intermediate_keys, "recap_data", recap_data_file)
+
+                # Log emotion analysis metrics
+                import json as _json
+                try:
+                    with open(recap_data_file) as f:
+                        recap_data = _json.load(f)
+
+                    emotions_used = recap_data.get("emotions_used", False)
+                    clip_emotions = recap_data.get("clip_emotions", [])
+
+                    if emotions_used:
+                        logger.info(f"✓ EMOTION ANALYSIS ENABLED (PREMIUM TIER)")
+                        logger.info(f"  Clips selected: {len(recap_data.get('clip_timings', []))}")
+                        logger.info(f"  Emotional moments: {len(clip_emotions)}")
+
+                        # Log emotion breakdown
+                        emotion_counts = {}
+                        for clip_emotion in clip_emotions:
+                            emotion = clip_emotion.get("dominant_emotion", "neutral")
+                            emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
+
+                        logger.info(f"  Emotion distribution: {emotion_counts}")
+
+                        # Log intensity stats
+                        intensities = [clip_emotion.get("intensity", 0) for clip_emotion in clip_emotions]
+                        if intensities:
+                            logger.info(f"  Intensity range: {min(intensities):.2f} - {max(intensities):.2f} (avg: {sum(intensities)/len(intensities):.2f})")
+                    else:
+                        logger.info(f"✓ BASIC TRANSCRIPTION ONLY (no emotion analysis)")
+                        logger.info(f"  Clips selected: {len(recap_data.get('clip_timings', []))}")
+                except Exception as e:
+                    logger.warning(f"Could not parse recap metrics: {e}")
+
                 self.progress.report(3, "Recap generated", 1.0)
             else:
                 self.progress.report(3, "Recap (cached)", 1.0)

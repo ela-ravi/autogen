@@ -165,6 +165,120 @@ def transcribe_video(video_path, output_dir="output/transcriptions", model_size=
     return json_file
 
 
+def transcribe_video_with_emotions(
+    video_path,
+    output_dir="output/transcriptions",
+    model_size="small",
+    language=None,
+    skip_emotions_on_error=True
+):
+    """
+    Step 1+: Transcribe video AND analyze emotions from audio (PREMIUM FEATURE)
+
+    This is the premium version that includes emotion analysis.
+    Cost: +$0.02-0.05 per video (Google Cloud Speech API)
+    Time: +5-8 seconds per video
+
+    Args:
+        video_path: Path to input video file
+        output_dir: Directory to save transcription
+        model_size: Whisper model size (tiny, base, small, medium, large)
+        language: Language code (e.g., 'en' for English, 'es' for Spanish). Auto-detect if None.
+        skip_emotions_on_error: If True, continue without emotions if analysis fails
+
+    Returns:
+        Tuple: (transcription_file_path, emotions_file_path or None)
+    """
+    # Step 1: First, do regular transcription (reuse existing function)
+    transcript_file = transcribe_video(video_path, output_dir, model_size, language)
+
+    # Step 1.5: Analyze emotions (NEW)
+    print(f"\n{'='*70}")
+    print(f"STEP 1.5: ANALYZING AUDIO EMOTIONS (PREMIUM)")
+    print(f"{'='*70}")
+
+    try:
+        # Import here to avoid hard dependency
+        from app.processing.emotion_analysis import analyze_audio_emotions
+
+        audio_path = os.path.join(get_output_path("output/original"), "extracted_audio.wav")
+
+        if not os.path.exists(audio_path):
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+        print(f"Audio: {audio_path}")
+        print("Analyzing emotions from speech...")
+
+        emotions = analyze_audio_emotions(audio_path)
+
+        # Save emotions as JSON
+        output_path = get_output_path(output_dir)
+        emotions_file = os.path.join(output_path, "emotions.json")
+        with open(emotions_file, "w") as f:
+            json.dump(emotions, f, indent=2)
+
+        print(f"✅ Emotion analysis complete!")
+        print(f"   Segments analyzed: {len(emotions)}")
+        print(f"   Emotions file: {emotions_file}")
+        print(f"   Cost: +$0.02-0.05 (Google Cloud Speech API)")
+
+        return transcript_file, emotions_file
+
+    except Exception as e:
+        error_msg = f"Emotion analysis failed: {e}"
+        print(f"⚠️  {error_msg}")
+
+        if skip_emotions_on_error:
+            print("   Continuing without emotions (will use basic transcription only)")
+            return transcript_file, None
+        else:
+            raise
+
+
+def transcribe_with_optional_emotions(
+    video_path,
+    output_dir="output/transcriptions",
+    model_size="small",
+    language=None,
+    include_emotions=False
+):
+    """
+    Unified transcription function that respects subscription tier.
+
+    This is the MAIN function to use. It dispatches to either:
+    - transcribe_video() for FREE/BASIC tier
+    - transcribe_video_with_emotions() for PREMIUM tier
+
+    Args:
+        video_path: Path to input video file
+        output_dir: Directory to save transcription
+        model_size: Whisper model size
+        language: Language code
+        include_emotions: Boolean - whether to include emotion analysis
+                         (controlled by subscription tier or job config)
+
+    Returns:
+        Tuple: (transcription_file, emotions_file or None)
+
+    Cost Implications:
+        - include_emotions=False: FREE (local Whisper only)
+        - include_emotions=True: +$0.02-0.05 per video (Google Cloud Speech)
+    """
+    if include_emotions:
+        print("🎙️  Using PREMIUM tier (with emotion analysis)")
+        return transcribe_video_with_emotions(
+            video_path,
+            output_dir,
+            model_size,
+            language,
+            skip_emotions_on_error=True
+        )
+    else:
+        print("📝 Using BASIC tier (transcription only)")
+        transcript_file = transcribe_video(video_path, output_dir, model_size, language)
+        return transcript_file, None
+
+
 def translate_transcription(input_file, source_lang, target_lang, output_dir="output/transcriptions"):
     """
     Step 2: Translate transcription to another language.
@@ -286,6 +400,8 @@ __all__ = [
     "is_whisper_model_cached",
     "sync_whisper_cache_invalidation",
     "transcribe_video",
+    "transcribe_video_with_emotions",
+    "transcribe_with_optional_emotions",
     "translate_transcription",
 ]
 
