@@ -216,6 +216,93 @@ python run_recap_workflow.py /path/to/video.mp4 \
 
 ---
 
+## 🔧 Debugging Step Outputs
+
+During development, you can inspect intermediate outputs from each of the 7 steps to diagnose issues or verify quality.
+
+### Enable Debug Mode
+
+Set `DEBUG=true` in your backend `.env`:
+```bash
+echo "DEBUG=true" >> backend/.env
+docker-compose restart backend
+```
+
+### View Intermediate Outputs
+
+**Option 1: API Response** (easiest)
+```bash
+# Get job with intermediate_keys_detailed
+curl http://localhost:8000/api/v1/jobs/{job_id} | jq '.intermediate_keys_detailed'
+
+# Response includes:
+{
+  "transcription": {
+    "key": "jobs/{id}/transcription/transcription.json",
+    "name": "transcription",
+    "size_mb": 2.3,
+    "download_url": "/api/v1/jobs/{id}/debug/transcription"
+  },
+  ...
+}
+```
+
+**Option 2: Download via Endpoints**
+```bash
+# Download each intermediate directly
+curl http://localhost:8000/api/v1/jobs/{job_id}/debug/transcription > transcription.json
+curl http://localhost:8000/api/v1/jobs/{job_id}/debug/translation > translated.json
+curl http://localhost:8000/api/v1/jobs/{job_id}/debug/recap > recap_data.json
+curl http://localhost:8000/api/v1/jobs/{job_id}/debug/tts-audio > narration.mp3
+curl http://localhost:8000/api/v1/jobs/{job_id}/debug/recap-video > clips.mp4
+```
+
+### Understanding Intermediate Files
+
+| Step | File | What it contains | Use case |
+|------|------|---|---|
+| 1 | `transcription.json` | Timestamped transcript | Verify Whisper accuracy |
+| 2 | `translated.json` | Translated transcript | Check GPT translation quality |
+| 3 | `recap_data.json` | Clip timings + metadata | Verify which clips were selected |
+| 4 | `recap_narration.mp3` | TTS audio file | Check narration voice/quality |
+| 5 | `recap_video.mp4` | Merged clips (no audio) | Verify clip selection & timing |
+| 7 | `recap_video_with_narration.mp4` | Final output | Download completed video |
+
+### Check Log Metrics
+
+After each step completes, the server logs metrics like:
+```bash
+# Watch server logs
+docker logs autogen-worker-1
+
+# You'll see:
+Step 1 complete: Transcription | Size: 2.3MB | Segments: 142 | S3: jobs/{id}/transcription/transcription.json
+Step 3 complete: Recap Generation | Size: 45KB | Clips: 8 | Narration: 87 words | S3: jobs/{id}/recap_data/recap_data.json
+Step 4 complete: TTS Narration | Size: 1.8MB | Duration: 28.5s | Voice: nova | S3: jobs/{id}/tts_audio/recap_narration.mp3
+Step 5 complete: Clip Extraction | Size: 45MB | Duration: 30s | S3: jobs/{id}/recap_video/recap_video.mp4
+Step 7 complete: Final Merge | Size: 46MB | Duration: 30s | S3: results/{id}/recap_video_with_narration.mp4
+```
+
+### Troubleshooting Failed Steps
+
+```bash
+# 1. Get error message
+curl http://localhost:8000/api/v1/jobs/{job_id} | jq '.error_message'
+
+# 2. Download intermediate from last successful step
+curl http://localhost:8000/api/v1/jobs/{job_id}/debug/recap > last_good_recap.json
+
+# 3. Check server logs
+docker logs autogen-backend-1  # FastAPI logs
+docker logs autogen-worker-1   # Celery worker logs
+
+# 4. Resume from failed step
+curl -X POST http://localhost:8000/api/v1/jobs/{job_id}/resume
+# Job resumes from where it failed, using cached outputs
+```
+
+---
+
 ## 🎯 Claude Code Skills & Tools
 
 This project uses Claude Code for development. The following skills are configured and available:
