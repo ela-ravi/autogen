@@ -216,12 +216,82 @@ python run_recap_workflow.py /path/to/video.mp4 \
 
 ---
 
+## 🎯 Claude Code Skills & Tools
+
+This project uses Claude Code for development. The following skills are configured and available:
+
+### Installed Skills
+
+#### 1. **Fallow Skills** 
+**Source:** `fallow-rs/fallow-skills` (GitHub)  
+**Config:** `skills-lock.json`  
+**Auto-loaded:** Yes
+
+Fallow skills are automatically loaded from the configuration. Skills are sourced from the [fallow-rs/fallow-skills](https://github.com/fallow-rs/fallow-skills) repository.
+
+#### 2. **GitHub MCP Server**
+**Purpose:** Seamless GitHub integration  
+**Config:** `.mcp.json`  
+**Status:** Configured and ready
+
+**Setup (if needed):**
+```bash
+# Create GitHub Personal Access Token
+# https://github.com/settings/tokens/new
+# Scopes: repo, read:user, user:email
+
+# Add to ~/.claude/settings.json
+{
+  "env": {
+    "GITHUB_TOKEN": "your-github-pat-here"
+  }
+}
+```
+
+**Usage:**
+- Create and manage pull requests
+- View and comment on issues
+- Check workflow status
+- Browse repository code
+
+### Available Claude Code Built-in Skills
+
+| Skill | Command | Purpose |
+|-------|---------|---------|
+| **Verify** | `/verify` | Test UI changes in browser before committing |
+| **Code Review** | `/code-review` | Review code for bugs and quality issues |
+| **Simplify** | `/simplify` | Refactor code for efficiency and clarity |
+| **Run** | `/run` | Start development server |
+| **Review** | `/review` | Review pull requests |
+| **Security Review** | `/security-review` | Security audit of code changes |
+| **Init** | `/init` | Create CLAUDE.md project documentation |
+
+### Usage Examples
+
+```bash
+# Test your changes in a browser
+/verify
+
+# Review code for issues
+/code-review --comment  # Add inline comments
+
+# Start the dev server
+/run
+
+# Run security audit
+/security-review
+```
+
+---
+
 ## 📚 Documentation
 
 - **`SETUP.md`** - Complete setup guide for new users
 - **`QUICK_REFERENCE.md`** - Quick command reference with examples
 - **`OUTPUT_PATHS.md`** - Output file locations reference
 - **`resume/README.md`** - Resume workflow from checkpoints (save time & costs!)
+- **`CORE_PROCESS_FLOW.md`** - Detailed step-by-step process with AI models used
+- **`DEPLOYMENT.md`** - VPS deployment instructions
 
 ---
 
