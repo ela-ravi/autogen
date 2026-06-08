@@ -175,4 +175,8 @@ Update: README.md - if "## Api Reference" exists, add link; if not, create headi
 
 ## Integration with Project
 
-This skill is registered in `.claude/settings.json` and guides all documentation work in this project. When any documentation task is requested, this workflow is followed automatically.
+This skill is defined once in `/skills/docs-router.md` and referenced from both:
+- `.claude/settings.json` (Claude Code CLI)
+- `.cursor/skills/` (Cursor IDE)
+
+Single source of truth ensures both tools stay in sync.

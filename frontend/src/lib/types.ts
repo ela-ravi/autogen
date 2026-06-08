@@ -36,6 +36,13 @@ export interface JobConfig {
   pad_with_black: boolean;
 }
 
+export interface IntermediateFile {
+  key: string;
+  name: string;
+  size_mb: number | null;
+  download_url: string | null;
+}
+
 export interface Job {
   id: string;
   user_id: string;
@@ -52,6 +59,8 @@ export interface Job {
   completed_at: string | null;
   expires_at: string | null;
   has_original_in_storage: boolean;
+  intermediate_keys?: Record<string, string> | null;
+  intermediate_keys_detailed?: Record<string, IntermediateFile> | null;
 }
 
 export interface JobListResponse {

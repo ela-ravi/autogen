@@ -5,7 +5,7 @@
   "customSkills": [
     {
       "name": "docs-router",
-      "path": "./.claude/skills/docs-router.md",
+      "path": "../skills/docs-router.md",
       "description": "Route documentation to README.md (inline) or separate files (linked from README.md)",
       "triggers": [
         "create documentation",

@@ -307,13 +307,15 @@ curl -X POST http://localhost:8000/api/v1/jobs/{job_id}/resume
 
 ### Skills Architecture
 
-| Category | Config File | Scope | Purpose |
-|----------|---|---|---|
-| **External Skills** | `skills-lock.json` | Project (committed) | External dependencies (Fallow Skills from GitHub) |
-| **Project Skills** | `.claude/settings.json` | Team-wide | Custom project conventions (e.g., `docs-router`) |
-| **Local Skills** | `.claude/settings.local.json` | Personal (gitignored) | Individual developer preferences |
+| Category | Config File | Source | Scope | Purpose |
+|----------|---|---|---|---|
+| **External Skills** | `skills-lock.json` | GitHub (Fallow) | Project (committed) | External dependencies |
+| **Custom Skills** | `/skills/*.md` | Local (single source) | Both tools | Shared across Claude Code + Cursor |
+| **Tool Config** | `.claude/settings.json` | Local | Claude Code only | References `/skills/` |
+| **Tool Config** | `.cursor/settings.json` | Local | Cursor only | References `/skills/` |
+| **Local Overrides** | `.claude/settings.local.json` | Local (gitignored) | Personal | Individual preferences |
 
-**Skills files:** `.claude/skills/*.md` — Referenced from settings.json
+**Single source of truth:** All custom skills defined in `/skills/` and referenced from both `.claude/` and `.cursor/`
 
 ### Installed Skills
 
@@ -330,7 +332,7 @@ curl -X POST http://localhost:8000/api/v1/jobs/{job_id}/resume
 # Workflow: Ask → Route (inline or separate file) → Update README if needed
 ```
 
-See `.claude/skills/docs-router.md` for full details.
+See [`/skills/docs-router.md`](./skills/docs-router.md) for full details.
 
 ### Built-in Claude Code Skills
 

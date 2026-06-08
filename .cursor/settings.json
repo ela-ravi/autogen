@@ -1,0 +1,9 @@
+{
+  "customRules": [
+    {
+      "name": "docs-router",
+      "path": "../skills/docs-router.md",
+      "description": "Route documentation to README.md (inline) or separate files (linked from README.md)"
+    }
+  ]
+}
