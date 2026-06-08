@@ -305,69 +305,42 @@ curl -X POST http://localhost:8000/api/v1/jobs/{job_id}/resume
 
 ## 🎯 Claude Code Skills & Tools
 
-This project uses Claude Code for development. The following skills are configured and available:
+### Skills Architecture
+
+| Category | Config File | Scope | Purpose |
+|----------|---|---|---|
+| **External Skills** | `skills-lock.json` | Project (committed) | External dependencies (Fallow Skills from GitHub) |
+| **Project Skills** | `.claude/settings.json` | Team-wide | Custom project conventions (e.g., `docs-router`) |
+| **Local Skills** | `.claude/settings.local.json` | Personal (gitignored) | Individual developer preferences |
+
+**Skills files:** `.claude/skills/*.md` — Referenced from settings.json
 
 ### Installed Skills
 
-#### 1. **Fallow Skills** 
-**Source:** `fallow-rs/fallow-skills` (GitHub)  
-**Config:** `skills-lock.json`  
-**Auto-loaded:** Yes
+- **Fallow Skills** (`skills-lock.json`) - [fallow-rs/fallow-skills](https://github.com/fallow-rs/fallow-skills)
+- **docs-router** (`.claude/settings.json`) - Route documentation to README.md or separate linked files
+- **GitHub MCP** (`.mcp.json`) - Create/manage PRs, view issues, check workflows
 
-Fallow skills are automatically loaded from the configuration. Skills are sourced from the [fallow-rs/fallow-skills](https://github.com/fallow-rs/fallow-skills) repository.
+### Project-Specific Custom Skills
 
-#### 2. **GitHub MCP Server**
-**Purpose:** Seamless GitHub integration  
-**Config:** `.mcp.json`  
-**Status:** Configured and ready
+**docs-router** — Ensures all documentation either lives in `README.md` (inline) or in separate files linked from `README.md`
 
-**Setup (if needed):**
 ```bash
-# Create GitHub Personal Access Token
-# https://github.com/settings/tokens/new
-# Scopes: repo, read:user, user:email
-
-# Add to ~/.claude/settings.json
-{
-  "env": {
-    "GITHUB_TOKEN": "your-github-pat-here"
-  }
-}
+# Triggered automatically when documentation is requested
+# Workflow: Ask → Route (inline or separate file) → Update README if needed
 ```
 
-**Usage:**
-- Create and manage pull requests
-- View and comment on issues
-- Check workflow status
-- Browse repository code
+See `.claude/skills/docs-router.md` for full details.
 
-### Available Claude Code Built-in Skills
+### Built-in Claude Code Skills
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
-| **Verify** | `/verify` | Test UI changes in browser before committing |
-| **Code Review** | `/code-review` | Review code for bugs and quality issues |
-| **Simplify** | `/simplify` | Refactor code for efficiency and clarity |
-| **Run** | `/run` | Start development server |
-| **Review** | `/review` | Review pull requests |
-| **Security Review** | `/security-review` | Security audit of code changes |
-| **Init** | `/init` | Create CLAUDE.md project documentation |
-
-### Usage Examples
-
-```bash
-# Test your changes in a browser
-/verify
-
-# Review code for issues
-/code-review --comment  # Add inline comments
-
-# Start the dev server
-/run
-
-# Run security audit
-/security-review
-```
+| Verify | `/verify` | Test changes in browser |
+| Code Review | `/code-review` | Review for bugs/quality |
+| Simplify | `/simplify` | Refactor for efficiency |
+| Security Review | `/security-review` | Security audit |
+| Run | `/run` | Start dev server |
 
 ---
 
