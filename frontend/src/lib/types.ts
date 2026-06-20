@@ -5,12 +5,15 @@ export interface User {
   auth_provider: string;
   is_active: boolean;
   tier: string;
+  is_admin: boolean;
   has_openai_key: boolean;
+  has_assemblyai_key: boolean;
   created_at: string;
 }
 
 export interface FeatureFlags {
-  requires_api_key: boolean;
+  requires_openai_api_key: boolean;
+  requires_assemblyai_key: boolean;
 }
 
 export interface TokenResponse {
@@ -34,6 +37,7 @@ export interface JobConfig {
   language?: string;
   translate_to?: string;
   pad_with_black: boolean;
+  include_emotions?: boolean;
 }
 
 export interface IntermediateFile {
@@ -59,6 +63,9 @@ export interface Job {
   completed_at: string | null;
   expires_at: string | null;
   has_original_in_storage: boolean;
+  keep_original_video?: boolean | null;
+  emotion_analysis_status?: string | null; // "completed", "failed", "skipped"
+  emotion_analysis_error?: string | null;
   output_video_key?: string | null;
   intermediate_keys?: Record<string, string> | null;
   intermediate_keys_detailed?: Record<string, IntermediateFile> | null;

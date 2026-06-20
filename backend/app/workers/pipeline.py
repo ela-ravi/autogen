@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
+from app.core.step_storage import StepStorage
 from app.processing.audio_processing import generate_tts_service, merge_audio_video_service
 from app.processing.progress import ProgressReporter
 from app.processing.transcription import transcribe_video_service, translate_transcription_service
@@ -26,6 +27,7 @@ class RecapPipeline:
         self.input_video_key = input_video_key
         self.update_job_fn = update_job_fn
         self.working_dir = None
+        self.step_storage = StepStorage(job_id, storage)
 
         reporter_callback = publish_progress_fn or (lambda **kw: None)
         self.progress = ProgressReporter(reporter_callback)
@@ -122,10 +124,12 @@ class RecapPipeline:
             translate_to = self.config.get("translate_to")
             tts_model = self.config.get("tts_model", "tts-1")
             tts_voice = self.config.get("tts_voice", "nova")
+            include_emotions = self.config.get("include_emotions", False)
 
             # --- Restore intermediates needed for resumption ---
             transcription_file = None
             active_transcription = None
+            emotions_file = None
             recap_data_file = None
             recap_text_file = os.path.join(working_dir, "output/transcriptions/recap_text.txt")
             tts_audio_file = None
@@ -143,6 +147,11 @@ class RecapPipeline:
                         intermediate_keys, "transcription",
                         os.path.join(working_dir, "output/transcriptions/transcription.json"))
                 transcription_file = active_transcription
+                # Also restore emotions if they were analyzed
+                if include_emotions and "emotions" in intermediate_keys:
+                    emotions_file = self._download_intermediate(
+                        intermediate_keys, "emotions",
+                        os.path.join(working_dir, "output/transcriptions/emotions.json"))
 
             if resume_from_step >= 4 and "recap_data" in intermediate_keys:
                 recap_data_file = self._download_intermediate(
@@ -178,18 +187,51 @@ class RecapPipeline:
             if resume_from_step > 0:
                 logger.info(f"Resuming job {self.job_id} from step {resume_from_step}")
 
-            # Step 1: Transcribe
+            # Step 1: Transcribe (+ emotions if PREMIUM tier)
+            emotion_analysis_status = None
+            emotion_analysis_error = None
             if resume_from_step <= 1:
                 self._update_job(current_step=1, current_step_name="Transcribing video")
                 self.progress.report(1, "Starting transcription...", 0.0)
                 result = transcribe_video_service(
                     local_video_path, working_dir,
                     model_size=model_size, language=language,
+                    include_emotions=include_emotions,
                     progress_callback=self._progress_callback,
                 )
                 transcription_file = result["transcription_file"]
+                emotions_file = result.get("emotions_file")  # None for BASIC tier, path for PREMIUM
                 active_transcription = transcription_file
+
+                # Upload step outputs
+                files_to_upload = {"transcript": transcription_file}
+                if emotions_file:
+                    files_to_upload["emotions"] = emotions_file
+                step_keys = self.step_storage.upload_step_output(
+                    step_num=1,
+                    files_dict=files_to_upload,
+                    metadata={"model": model_size, "language": language, "include_emotions": include_emotions}
+                )
+                intermediate_keys.update(step_keys)
                 self._upload_intermediate(intermediate_keys, "transcription", transcription_file)
+
+                # Track emotion analysis status
+                if include_emotions:
+                    if emotions_file:
+                        emotion_analysis_status = "completed"
+                        self._upload_intermediate(intermediate_keys, "emotions", emotions_file)
+                        logger.info(f"✅ Emotion analysis completed: {emotions_file}")
+                    else:
+                        emotion_analysis_status = "failed"
+                        emotion_analysis_error = "Google Cloud Speech API error. Check logs for details."
+                        logger.warning(f"❌ Emotion analysis failed for job {self.job_id}. Continuing with basic transcription.")
+                else:
+                    emotion_analysis_status = "skipped"
+
+                self._update_job(
+                    emotion_analysis_status=emotion_analysis_status,
+                    emotion_analysis_error=emotion_analysis_error
+                )
 
                 # Log metrics
                 metrics = self._get_file_metrics(transcription_file)
@@ -198,7 +240,6 @@ class RecapPipeline:
                     log_msg += f" | Segments: {metrics['count']}"
                 log_msg += f" | S3: {intermediate_keys.get('transcription', 'N/A')}"
                 logger.info(log_msg)
-
                 self.progress.report(1, "Transcription complete", 1.0)
             else:
                 self.progress.report(1, "Transcription (cached)", 1.0)
@@ -215,6 +256,14 @@ class RecapPipeline:
                         progress_callback=self._progress_callback,
                     )
                     active_transcription = result["translated_file"]
+
+                    # Upload step outputs
+                    step_keys = self.step_storage.upload_step_output(
+                        step_num=3,
+                        files_dict={"transcript_translated": active_transcription},
+                        metadata={"source_language": source_lang, "target_language": translate_to}
+                    )
+                    intermediate_keys.update(step_keys)
                     self._upload_intermediate(intermediate_keys, "translation", active_transcription)
 
                     # Log metrics
@@ -232,18 +281,64 @@ class RecapPipeline:
             else:
                 self.progress.report(2, "Translation (cached)", 1.0)
 
-            # Step 3: Generate recap
+            # Step 3: Generate recap (with emotion weighting if PREMIUM tier)
             if resume_from_step <= 3:
                 self._update_job(current_step=3, current_step_name="Generating recap")
                 self.progress.report(3, "Generating recap suggestions...", 0.0)
+                narration_lang = translate_to or language or "English"
                 result = generate_recap_service(
                     active_transcription, working_dir,
                     target_duration=target_duration,
-                    narration_language=translate_to,
+                    narration_language=narration_lang,
+                    emotions_file=emotions_file,  # None for BASIC, path for PREMIUM
                     progress_callback=self._progress_callback,
                 )
                 recap_data_file = result["recap_data_file"]
+
+                # Upload step outputs
+                step_keys = self.step_storage.upload_step_output(
+                    step_num=4,
+                    files_dict={"recap_data": recap_data_file},
+                    metadata={
+                        "target_duration": target_duration,
+                        "narration_language": narration_lang,
+                        "emotions_included": emotions_file is not None
+                    }
+                )
+                intermediate_keys.update(step_keys)
                 self._upload_intermediate(intermediate_keys, "recap_data", recap_data_file)
+
+                # Log emotion analysis metrics
+                import json as _json
+                try:
+                    with open(recap_data_file) as f:
+                        recap_data = _json.load(f)
+
+                    emotions_used = recap_data.get("emotions_used", False)
+                    clip_emotions = recap_data.get("clip_emotions", [])
+
+                    if emotions_used:
+                        logger.info(f"✓ EMOTION ANALYSIS ENABLED (PREMIUM TIER)")
+                        logger.info(f"  Clips selected: {len(recap_data.get('clip_timings', []))}")
+                        logger.info(f"  Emotional moments: {len(clip_emotions)}")
+
+                        # Log emotion breakdown
+                        emotion_counts = {}
+                        for clip_emotion in clip_emotions:
+                            emotion = clip_emotion.get("dominant_emotion", "neutral")
+                            emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
+
+                        logger.info(f"  Emotion distribution: {emotion_counts}")
+
+                        # Log intensity stats
+                        intensities = [clip_emotion.get("intensity", 0) for clip_emotion in clip_emotions]
+                        if intensities:
+                            logger.info(f"  Intensity range: {min(intensities):.2f} - {max(intensities):.2f} (avg: {sum(intensities)/len(intensities):.2f})")
+                    else:
+                        logger.info(f"✓ BASIC TRANSCRIPTION ONLY (no emotion analysis)")
+                        logger.info(f"  Clips selected: {len(recap_data.get('clip_timings', []))}")
+                except Exception as e:
+                    logger.warning(f"Could not parse recap metrics: {e}")
 
                 # Log metrics
                 metrics = self._get_file_metrics(recap_data_file)
@@ -272,6 +367,19 @@ class RecapPipeline:
                 )
                 tts_audio_file = result["tts_audio_file"]
                 actual_audio_duration = result["actual_audio_duration"]
+
+                # Upload step outputs
+                step_keys = self.step_storage.upload_step_output(
+                    step_num=5,
+                    files_dict={"narration_audio": tts_audio_file},
+                    metadata={
+                        "tts_model": tts_model,
+                        "voice": tts_voice,
+                        "duration": actual_audio_duration,
+                        "target_duration": target_duration
+                    }
+                )
+                intermediate_keys.update(step_keys)
                 self._upload_intermediate(intermediate_keys, "tts_audio", tts_audio_file)
 
                 # Log metrics
@@ -310,6 +418,14 @@ class RecapPipeline:
                     progress_callback=self._progress_callback,
                 )
                 recap_video_file = result["recap_video_file"]
+
+                # Upload step outputs
+                step_keys = self.step_storage.upload_step_output(
+                    step_num=6,
+                    files_dict={"video_with_clips": recap_video_file},
+                    metadata={"target_duration": clip_trim_target}
+                )
+                intermediate_keys.update(step_keys)
                 self._upload_intermediate(intermediate_keys, "recap_video", recap_video_file)
 
                 # Log metrics
@@ -341,6 +457,9 @@ class RecapPipeline:
                     progress_callback=self._progress_callback,
                 )
                 no_audio_video = result["no_audio_video_file"]
+
+                # Note: This step doesn't upload as it's an intermediate transformation
+                # The final step (7) uploads the complete result
                 self.progress.report(6, "Audio removed", 1.0)
             else:
                 self.progress.report(6, "Audio removal (cached)", 1.0)
@@ -387,6 +506,18 @@ class RecapPipeline:
                 max_duration_seconds=user_trim_cap,
             )
             final_video = result["final_video_file"]
+
+            # Upload step outputs
+            step_keys = self.step_storage.upload_step_output(
+                step_num=7,
+                files_dict={"final_video": final_video},
+                metadata={
+                    "max_duration": user_trim_cap,
+                    "original_audio_level": self.config.get("original_audio_level", 25),
+                    "narration_audio_level": self.config.get("narration_audio_level", 100)
+                }
+            )
+            intermediate_keys.update(step_keys)
             self.progress.report(7, "Final video ready", 1.0)
 
             # Upload final output to S3
@@ -468,5 +599,10 @@ class RecapPipeline:
                 logger.info(f"Job {self.job_id} was stopped by user, not marking as failed")
             raise
         finally:
-            if self.working_dir and os.path.exists(self.working_dir):
+            if settings.preserve_pipeline_working_dir() and self.working_dir:
+                logger.info(
+                    "Preserved recap job workspace (DEBUG or KEEP_PIPELINE_WORKING_DIR): %s",
+                    self.working_dir,
+                )
+            elif self.working_dir and os.path.exists(self.working_dir):
                 shutil.rmtree(self.working_dir, ignore_errors=True)

@@ -15,6 +15,7 @@ class JobConfig(BaseModel):
     language: str | None = None
     translate_to: str | None = None
     pad_with_black: bool = False
+    include_emotions: bool = False  # Premium tier: emotion analysis from audio
 
 
 class IntermediateFile(BaseModel):
@@ -49,6 +50,9 @@ class JobResponse(BaseModel):
     completed_at: datetime | None
     expires_at: datetime | None
     has_original_in_storage: bool
+    keep_original_video: bool | None = None
+    emotion_analysis_status: str | None = None  # "completed", "failed", "skipped"
+    emotion_analysis_error: str | None = None
     output_video_key: str | None = None  # S3 key for final output (if completed)
     intermediate_keys: dict | None = None  # Raw S3 keys dict
     intermediate_keys_detailed: dict[str, IntermediateFile] | None = None  # With metadata and download URLs
@@ -112,6 +116,9 @@ def job_to_response(job: RecapJob) -> JobResponse:
         completed_at=job.completed_at,
         expires_at=job.expires_at,
         has_original_in_storage=job.input_video_key is not None,
+        keep_original_video=getattr(job, 'keep_original_video', None),
+        emotion_analysis_status=getattr(job, 'emotion_analysis_status', None),
+        emotion_analysis_error=getattr(job, 'emotion_analysis_error', None),
         output_video_key=job.output_video_key,
         intermediate_keys=job.intermediate_keys,
         intermediate_keys_detailed=intermediate_keys_detailed,

@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel
+
 from app.api.v1.deps import get_current_user_or_api_key, get_db
 from app.models.user import User
 from app.schemas.job import CreateJobRequest, DownloadResponse, JobListResponse, JobResponse, job_to_response
@@ -105,22 +107,8 @@ async def download_job(
     if not job.output_video_key:
         raise HTTPException(status_code=400, detail="Job completed but output video key not set. Please try again.")
 
-    filename = job.original_filename.rsplit(".", 1)[0] + "_recap.mp4"
-
-    try:
-        def stream():
-            body = storage.client.get_object(Bucket=storage.bucket, Key=job.output_video_key)["Body"]
-            for chunk in body.iter_chunks(chunk_size=1024 * 1024):
-                yield chunk
-
-        return StreamingResponse(
-            stream(),
-            media_type="video/mp4",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
-    except Exception as e:
-        logger.error(f"Download failed for job {job_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+    url = storage.generate_presigned_url(job.output_video_key, expires_in=600)
+    return {"download_url": url}
 
 
 @router.post("/{job_id}/stop", response_model=JobResponse)
@@ -295,3 +283,33 @@ async def delete_job(
     deleted = await job_service.delete_job(db, job_id, current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Job not found")
+
+
+class ConfirmOriginalVideoRequest(BaseModel):
+    keep_original: bool
+
+
+@router.post("/{job_id}/confirm-original-video", response_model=JobResponse)
+async def confirm_original_video(
+    job_id: str,
+    body: ConfirmOriginalVideoRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Confirm whether to keep or delete the original video after job completion."""
+    job = await job_service.get_job(db, job_id, current_user.id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail="Job must be completed to confirm original video")
+
+    job.keep_original_video = body.keep_original
+
+    if not body.keep_original and job.input_video_key:
+        storage.delete_file(job.input_video_key)
+        job.input_video_key = None
+
+    await db.commit()
+    await db.refresh(job)
+
+    return job_to_response(job)

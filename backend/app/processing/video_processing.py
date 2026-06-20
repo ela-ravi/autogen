@@ -25,19 +25,27 @@ def generate_recap_service(
     working_dir: str,
     target_duration: int = 30,
     narration_language: str | None = None,
+    emotions_file: str | None = None,
     progress_callback: Callable | None = None,
 ) -> dict:
-    """Wrap modules.video_processing.generate_recap_suggestions."""
+    """Wrap modules.video_processing.generate_recap_suggestions.
+
+    Args:
+        emotions_file: Optional path to emotions.json. If provided, clip selection
+                      is weighted toward emotional intensity (PREMIUM tier feature).
+    """
     from modules.video_processing import generate_recap_suggestions
 
     with patched_module_paths(working_dir):
         if progress_callback:
-            progress_callback(step=3, message="AI analyzing transcription for recap...")
+            mode = " (with emotion weighting)" if emotions_file else ""
+            progress_callback(step=3, message=f"AI analyzing transcription for recap{mode}...")
         result_path = generate_recap_suggestions(
             transcription_file,
             target_duration=target_duration,
             output_dir="output/transcriptions",
             narration_language=narration_language,
+            emotions_file=emotions_file,
         )
         if progress_callback:
             progress_callback(step=3, message="Recap suggestions generated")

@@ -27,34 +27,74 @@ def transcribe_video_service(
     working_dir: str,
     model_size: str = "small",
     language: str | None = None,
+    include_emotions: bool = False,
     progress_callback: Callable | None = None,
 ) -> dict:
-    """Wrap modules.transcription.transcribe_video with path isolation."""
+    """Wrap modules.transcription.transcribe_with_optional_emotions with path isolation.
+
+    Supports multiple transcription backends:
+    - AssemblyAI with speaker diarization (if ENABLE_ASSEMBLYAI_DIARIZATION=true)
+    - Emotion analysis via Google Cloud Speech (if include_emotions=true)
+    - Default Whisper transcription (free/local)
+
+    Args:
+        include_emotions: If True, performs emotion analysis (PREMIUM tier).
+                         If False, transcription only (BASIC/FREE tier).
+
+    Returns:
+        {"transcription_file": path, "emotions_file": path_or_none}
+    """
     from modules.transcription import (
         is_whisper_model_cached,
         sync_whisper_cache_invalidation,
-        transcribe_video,
+        transcribe_with_optional_emotions,
     )
 
     with patched_module_paths(working_dir):
         sync_whisper_cache_invalidation(settings.REDIS_URL)
+
+        # Determine which transcription method to use
+        tier = ""
+        if settings.ENABLE_ASSEMBLYAI_DIARIZATION and settings.ASSEMBLYAI_API_KEY:
+            tier = "AssemblyAI with SPEAKER DIARIZATION"
+        elif include_emotions:
+            tier = "PREMIUM (with emotion analysis)"
+        else:
+            tier = "BASIC (transcription only)"
+
         if progress_callback:
-            if is_whisper_model_cached(model_size):
-                progress_callback(step=1, message="Transcribing (Whisper model already loaded)…")
+            if settings.ENABLE_ASSEMBLYAI_DIARIZATION and settings.ASSEMBLYAI_API_KEY:
+                progress_callback(step=1, message=f"Transcribing [{tier}] - identifying speakers…")
+            elif is_whisper_model_cached(model_size):
+                progress_callback(step=1, message=f"Transcribing [{tier}] (Whisper model already loaded)…")
             else:
                 progress_callback(
                     step=1,
-                    message="Loading Whisper model (first job on this worker), then transcribing…",
+                    message=f"Loading Whisper model (first job on this worker), then transcribing [{tier}]…",
                 )
-        result_path = transcribe_video(
+
+        transcription_file, emotions_file = transcribe_with_optional_emotions(
             video_path,
             output_dir="output/transcriptions",
             model_size=model_size,
             language=language,
+            include_emotions=include_emotions,
+            enable_assemblyai_diarization=settings.ENABLE_ASSEMBLYAI_DIARIZATION,
+            assemblyai_api_key=settings.ASSEMBLYAI_API_KEY,
+            assemblyai_language_code=settings.ASSEMBLYAI_LANGUAGE_CODE,
         )
+
         if progress_callback:
-            progress_callback(step=1, message="Transcription complete")
-        return {"transcription_file": result_path}
+            if settings.ENABLE_ASSEMBLYAI_DIARIZATION and settings.ASSEMBLYAI_API_KEY:
+                progress_callback(step=1, message="Transcription + speaker diarization complete")
+            else:
+                msg = "Transcription + emotion analysis complete" if include_emotions else "Transcription complete"
+                progress_callback(step=1, message=msg)
+
+        return {
+            "transcription_file": transcription_file,
+            "emotions_file": emotions_file,
+        }
 
 
 def translate_transcription_service(
