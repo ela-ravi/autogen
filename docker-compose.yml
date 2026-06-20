@@ -70,6 +70,7 @@ services:
     env_file:
       - .env
     environment:
+      - DEBUG=true
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/video_recap
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
