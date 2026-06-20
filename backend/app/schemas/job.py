@@ -80,7 +80,44 @@ def job_to_response(job: RecapJob) -> JobResponse:
     intermediate_keys_detailed = None
     if settings.DEBUG and job.intermediate_keys:
         intermediate_keys_detailed = {}
+        # Map old-style keys (e.g., "transcription") to new format if they exist
+        # Also include new step-based keys (e.g., "step_01.transcript")
+        key_mapping = {
+            "transcription": "transcription",
+            "step_01.transcript": "transcription",
+            "translation": "translation",
+            "step_02.translation": "translation",
+            "recap_data": "recap_data",
+            "step_04.recap_data": "recap_data",
+            "tts_audio": "tts_audio",
+            "step_05.narration_audio": "tts_audio",
+            "recap_video": "recap_video",
+            "step_06.video_with_clips": "recap_video",
+            "emotions": "emotions",
+            "step_01.emotions": "emotions",
+        }
+
+        # Path slug used in the download URL for each canonical intermediate.
+        # Keep these in sync with backend/app/api/v1/endpoints/jobs.py
+        url_slug = {
+            "transcription": "transcription",
+            "translation": "translation",
+            "recap_data": "recap",
+            "tts_audio": "tts-audio",
+            "recap_video": "recap-video",
+            "emotions": "emotions",
+        }
+
         for key_name, s3_path in job.intermediate_keys.items():
+            # Map to canonical name if it's a new-style key
+            canonical_name = key_mapping.get(key_name, key_name)
+
+            # Skip metadata files, anything we don't have a public route for, and duplicates
+            if ".metadata" in key_name or canonical_name in intermediate_keys_detailed:
+                continue
+            if canonical_name not in url_slug:
+                continue
+
             try:
                 # Get file size from S3
                 obj = storage.client.head_object(Bucket=storage.bucket, Key=s3_path)
@@ -88,14 +125,11 @@ def job_to_response(job: RecapJob) -> JobResponse:
             except Exception:
                 size_mb = None
 
-            # Generate download URL for this intermediate
-            download_url = f"/jobs/{job.id}/debug/{key_name if key_name != 'tts_audio' else 'tts-audio'}"
-            if key_name == "recap_video":
-                download_url = f"/jobs/{job.id}/debug/recap-video"
+            download_url = f"/jobs/{job.id}/debug/{url_slug[canonical_name]}"
 
-            intermediate_keys_detailed[key_name] = IntermediateFile(
+            intermediate_keys_detailed[canonical_name] = IntermediateFile(
                 key=s3_path,
-                name=key_name,
+                name=canonical_name,
                 size_mb=size_mb,
                 download_url=download_url,
             )

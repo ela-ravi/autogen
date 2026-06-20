@@ -10,6 +10,7 @@ import { formatDate, formatFileSize, statusColor } from "@/lib/utils";
 import type { Job } from "@/lib/types";
 import api from "@/lib/api";
 import { StepProgressWithDownloads } from "./StepProgressWithDownloads";
+import { StepOutputsPanel } from "./StepOutputsPanel";
 
 const STEP_NAMES = [
   "",
@@ -123,18 +124,78 @@ export function JobDetailContent({
     }
   }, [progress]);
 
+  const [isDebug, setIsDebug] = useState(false);
+
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activityLog]);
 
-  const isDebug = typeof window !== "undefined" && window.__meta__?.debug === true;
+  useEffect(() => {
+    // Set isDebug based on window.__meta__.debug
+    const checkDebug = () => {
+      if (typeof window !== "undefined" && window.__meta__?.debug !== undefined) {
+        setIsDebug(window.__meta__.debug === true);
+      }
+    };
+    checkDebug();
+    // Retry every 500ms for first 5 seconds in case __meta__ loads slowly
+    const timeout = setTimeout(() => clearInterval(interval), 5000);
+    const interval = setInterval(checkDebug, 500);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, []);
 
-  const handleFileDownload = async (endpoint: string, baseFilename: string) => {
+  const triggerBlobDownload = (blob: Blob, filename: string) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  // Extract a filename from a Content-Disposition header. Handles both the
+  // RFC 5987 `filename*=UTF-8''...` form and the plain `filename="..."` form.
+  const parseContentDispositionFilename = (header: string | undefined): string | null => {
+    if (!header) return null;
+    const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match) {
+      try {
+        return decodeURIComponent(utf8Match[1]);
+      } catch {
+        // fall through to plain form
+      }
+    }
+    const plainMatch = header.match(/filename="?([^";]+)"?/i);
+    return plainMatch ? plainMatch[1].trim() : null;
+  };
+
+  // Routes the download to the right transport:
+  // - The final-output endpoint returns JSON {download_url}; open that in a new tab.
+  // - Debug intermediate endpoints stream the file directly; download as a blob,
+  //   preferring the filename the server advertises so the extension is always correct.
+  const handleFileDownload = async (endpoint: string, fallbackFilename: string) => {
     try {
-      const response = await api.get(`/jobs/${jobId}/download`);
-      const { download_url } = response.data;
-      window.open(download_url, "_blank");
-      toast.success(`Opening ${baseFilename}`);
+      const isFinalOutput = endpoint.endsWith("/download");
+      if (isFinalOutput) {
+        const response = await api.get(endpoint);
+        const { download_url } = response.data;
+        window.open(download_url, "_blank");
+        toast.success(`Downloaded ${fallbackFilename}`);
+        return;
+      }
+
+      const response = await api.get(endpoint, { responseType: "blob" });
+      const serverFilename = parseContentDispositionFilename(
+        response.headers["content-disposition"] as string | undefined,
+      );
+      const filename = serverFilename || fallbackFilename;
+      triggerBlobDownload(response.data as Blob, filename);
+      toast.success(`Downloaded ${filename}`);
     } catch {
       toast.error("Download not available");
     }
@@ -359,12 +420,20 @@ export function JobDetailContent({
             <StepProgressWithDownloads
               activeStep={7}
               job={job}
-              isDebug={isDebug}
+              isDebug={true}
               onDownload={handleFileDownload}
             />
           </div>
         )}
       </div>
+
+      {isDebug &&
+        job.intermediate_keys_detailed &&
+        Object.keys(job.intermediate_keys_detailed).length > 0 && (
+          <div className="mb-6">
+            <StepOutputsPanel job={job} onDownload={handleFileDownload} />
+          </div>
+        )}
 
       {activityLog.length > 0 && (
         <div className="mb-6 rounded-lg border p-4 sm:p-6">

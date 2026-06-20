@@ -1,10 +1,41 @@
 import logging
+import mimetypes
 import boto3
 from botocore.exceptions import ClientError
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# Custom MIME overrides for file types where Python's mimetypes guess is
+# missing or unhelpful (e.g. .json on older stdlib, .mp4 vs application/mp4).
+_MIME_OVERRIDES = {
+    ".json": "application/json",
+    ".mp3": "audio/mpeg",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".txt": "text/plain",
+}
+
+
+def _guess_content_type(key: str) -> str:
+    """Pick a sensible Content-Type from the object key's file extension.
+
+    S3 defaults uploads to application/octet-stream, which makes browsers
+    save downloads as generic "documents". Setting Content-Type at upload
+    time lets presigned downloads carry the right type without per-download
+    overrides.
+    """
+    lower_key = key.lower()
+    for ext, mime in _MIME_OVERRIDES.items():
+        if lower_key.endswith(ext):
+            return mime
+    guessed, _ = mimetypes.guess_type(key)
+    return guessed or "application/octet-stream"
 
 
 class StorageService:
@@ -20,8 +51,14 @@ class StorageService:
 
     def upload_file(self, key: str, file_obj) -> None:
         try:
-            self.client.upload_fileobj(file_obj, self.bucket, key)
-            logger.info(f"✅ Uploaded S3: {key}")
+            content_type = _guess_content_type(key)
+            self.client.upload_fileobj(
+                file_obj,
+                self.bucket,
+                key,
+                ExtraArgs={"ContentType": content_type},
+            )
+            logger.info(f"✅ Uploaded S3: {key} ({content_type})")
         except Exception as e:
             logger.error(f"❌ Failed to upload S3 {key}: {str(e)}", exc_info=True)
             raise
