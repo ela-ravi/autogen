@@ -208,6 +208,7 @@ async def _download_intermediate_debug(
         "recap_data": ("recap_data.json", "application/json"),
         "tts_audio": ("recap_narration.mp3", "audio/mpeg"),
         "recap_video": ("recap_video.mp4", "video/mp4"),
+        "emotions": ("emotions.json", "application/json"),
     }
     default_name, default_media = filename_map.get(intermediate_key, (f"{intermediate_key}.bin", "application/octet-stream"))
     filename = job.original_filename.rsplit(".", 1)[0] + "_" + default_name
@@ -272,6 +273,16 @@ async def download_recap_video_debug(
 ):
     """Download the recap video with clips extracted but before audio merge. Only available when DEBUG=true."""
     return await _download_intermediate_debug(job_id, "recap_video", db, current_user)
+
+
+@router.get("/{job_id}/debug/emotions")
+async def download_emotions_debug(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Download the audio emotion analysis JSON (PREMIUM tier only). Only available when DEBUG=true."""
+    return await _download_intermediate_debug(job_id, "emotions", db, current_user)
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)

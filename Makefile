@@ -1,6 +1,7 @@
-.PHONY: up down dev restart logs migrate migration test test-cov shell
+.PHONY: up down dev dev-restart restart logs migrate migration test test-cov shell
 .PHONY: staging staging-down staging-restart logs-staging logs-staging-backend logs-staging-worker migrate-staging shell-staging
 
+DEV_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.dev.yml
 STAGING_COMPOSE = docker compose -p videorecap-staging -f docker-compose.yml -f docker-compose.staging.yml
 
 # --- Docker ---
@@ -11,7 +12,7 @@ down:
 	docker compose down
 
 dev:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+	$(DEV_COMPOSE) up -d
 
 prod:
 	docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
@@ -25,8 +26,14 @@ staging-down:
 staging-restart:
 	$(STAGING_COMPOSE) restart
 
-restart:
-	docker compose restart
+# Preserves dev overrides (volume mounts, dev Dockerfile) when restarting.
+# Plain `docker compose restart` would recreate containers using only the base
+# docker-compose.yml, which strips the ./frontend/src:/app/src bind mount and
+# leaves the container running stale source baked into the image.
+dev-restart:
+	$(DEV_COMPOSE) restart
+
+restart: dev-restart
 
 logs:
 	docker compose logs -f

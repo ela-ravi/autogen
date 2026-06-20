@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Download, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import type { Job, IntermediateFile } from "@/lib/types";
@@ -37,7 +36,7 @@ export function StepProgressWithDownloads({
   isDebug,
   onDownload,
 }: StepProgressWithDownloadsProps) {
-  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  const baseName = job.original_filename.replace(/\.[^.]+$/, "") || "recap";
 
   const handleDownloadStep = async (step: number) => {
     const intermediateKey = intermediateMap[step as keyof typeof intermediateMap];
@@ -48,13 +47,7 @@ export function StepProgressWithDownloads({
       return;
     }
 
-    try {
-      await onDownload(intermediate.download_url, `${job.id}_${intermediateKey}`);
-      // Success toast is handled by JobDetailContent handleFileDownload
-    } catch (error) {
-      // Error toast is handled by JobDetailContent handleFileDownload
-      throw error;
-    }
+    await onDownload(intermediate.download_url, `${baseName}_${intermediateKey}`);
   };
 
   const getStepIntermediate = (step: number): IntermediateFile | null => {
@@ -69,7 +62,7 @@ export function StepProgressWithDownloads({
     <div className="space-y-2">
       <div className="mt-4 grid grid-cols-7 gap-2">
         {[1, 2, 3, 4, 5, 6, 7].map((step) => {
-          const isCompleted = step < activeStep;
+          const isCompleted = step <= activeStep;
           const isActive = step === activeStep;
           const canDownload = isCompleted && isDebug && getStepIntermediate(step);
           const isTranslationDisabled = step === 2 && !hasTranslation;
@@ -88,9 +81,11 @@ export function StepProgressWithDownloads({
                 />
                 {canDownload && (
                   <button
-                    onClick={() => setExpandedStep(expandedStep === step ? null : step)}
-                    className="absolute -right-3 -top-1 rounded-full bg-green-100 p-1 text-green-700 hover:bg-green-200 transition-colors"
+                    type="button"
+                    onClick={() => handleDownloadStep(step)}
+                    className="absolute -right-3 -top-1 rounded-full bg-green-100 p-1 text-green-700 transition-colors hover:bg-green-200"
                     title={`Download ${STEP_NAMES[step]}`}
+                    aria-label={`Download ${STEP_NAMES[step]}`}
                   >
                     <Download className="h-3 w-3" />
                   </button>
@@ -101,19 +96,6 @@ export function StepProgressWithDownloads({
                   </div>
                 )}
               </div>
-
-              {/* Expandable Download Info */}
-              {expandedStep === step && canDownload && (
-                <div className="absolute top-full mt-1 rounded-md bg-green-50 border border-green-200 p-2 text-xs text-green-800 whitespace-nowrap z-10">
-                  <button
-                    onClick={() => handleDownloadStep(step)}
-                    className="font-medium hover:underline flex items-center gap-1"
-                  >
-                    <Download className="h-3 w-3" />
-                    Download {STEP_NAMES[step]}
-                  </button>
-                </div>
-              )}
 
               <p className="text-[10px] text-muted-foreground">
                 {STEP_NAMES[step]?.split(" ")[0]}
