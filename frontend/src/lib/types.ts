@@ -40,6 +40,13 @@ export interface JobConfig {
   include_emotions?: boolean;
 }
 
+export interface IntermediateFile {
+  key: string;
+  name: string;
+  size_mb: number | null;
+  download_url: string | null;
+}
+
 export interface Job {
   id: string;
   user_id: string;
@@ -59,6 +66,9 @@ export interface Job {
   keep_original_video?: boolean | null;
   emotion_analysis_status?: string | null; // "completed", "failed", "skipped"
   emotion_analysis_error?: string | null;
+  output_video_key?: string | null;
+  intermediate_keys?: Record<string, string> | null;
+  intermediate_keys_detailed?: Record<string, IntermediateFile> | null;
 }
 
 export interface JobListResponse {

@@ -92,16 +92,21 @@ async def download_job(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_or_api_key),
 ):
+    import logging
+    logger = logging.getLogger(__name__)
+
     job = await job_service.get_job(db, job_id, current_user.id)
     if not job:
+        logger.warning(f"Download attempt: job {job_id} not found for user {current_user.id}")
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status != "completed" or not job.output_video_key:
-        raise HTTPException(status_code=400, detail="Job not ready for download")
 
-    # - Server generates a temporary URL (valid for 600 seconds / 10 minutes)
-    # - Client receives just the URL 
-    # - Client downloads directly from S3 using that URL
-    # - Server doesn't handle the actual file transfer
+    logger.info(f"Download attempt for job {job_id}: status={job.status}, output_video_key={job.output_video_key}")
+
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail=f"Job not completed (status: {job.status})")
+    if not job.output_video_key:
+        raise HTTPException(status_code=400, detail="Job completed but output video key not set. Please try again.")
+
     url = storage.generate_presigned_url(job.output_video_key, expires_in=600)
     return {"download_url": url}
 
@@ -176,13 +181,13 @@ async def resume_job(
     return job_to_response(job)
 
 
-@router.get("/{job_id}/debug/narration")
-async def download_narration_audio(
+async def _download_intermediate_debug(
     job_id: str,
+    intermediate_key: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user_or_api_key),
 ):
-    """Download the TTS narration audio separately. Only available when DEBUG=true."""
+    """Generic debug endpoint to download any intermediate file."""
     from app.config import settings as app_settings
     if not app_settings.DEBUG:
         raise HTTPException(status_code=404, detail="Debug endpoints are disabled")
@@ -191,22 +196,82 @@ async def download_narration_audio(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    tts_key = (job.intermediate_keys or {}).get("tts_audio")
-    if not tts_key:
-        raise HTTPException(status_code=404, detail="Narration audio not available for this job")
+    intermediate_keys = job.intermediate_keys or {}
+    s3_key = intermediate_keys.get(intermediate_key)
+    if not s3_key:
+        raise HTTPException(status_code=404, detail=f"Intermediate '{intermediate_key}' not available for this job")
 
-    filename = job.original_filename.rsplit(".", 1)[0] + "_narration.mp3"
+    # Determine filename and media type
+    filename_map = {
+        "transcription": ("transcription.json", "application/json"),
+        "translation": ("translated.json", "application/json"),
+        "recap_data": ("recap_data.json", "application/json"),
+        "tts_audio": ("recap_narration.mp3", "audio/mpeg"),
+        "recap_video": ("recap_video.mp4", "video/mp4"),
+    }
+    default_name, default_media = filename_map.get(intermediate_key, (f"{intermediate_key}.bin", "application/octet-stream"))
+    filename = job.original_filename.rsplit(".", 1)[0] + "_" + default_name
 
     def stream():
-        body = storage.client.get_object(Bucket=storage.bucket, Key=tts_key)["Body"]
+        body = storage.client.get_object(Bucket=storage.bucket, Key=s3_key)["Body"]
         for chunk in body.iter_chunks(chunk_size=1024 * 1024):
             yield chunk
 
     return StreamingResponse(
         stream(),
-        media_type="audio/mpeg",
+        media_type=default_media,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/{job_id}/debug/transcription")
+async def download_transcription_debug(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Download the transcription JSON. Only available when DEBUG=true."""
+    return await _download_intermediate_debug(job_id, "transcription", db, current_user)
+
+
+@router.get("/{job_id}/debug/translation")
+async def download_translation_debug(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Download the translated transcription JSON (if translation was enabled). Only available when DEBUG=true."""
+    return await _download_intermediate_debug(job_id, "translation", db, current_user)
+
+
+@router.get("/{job_id}/debug/recap")
+async def download_recap_data_debug(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Download the recap data JSON (clip timings and metadata). Only available when DEBUG=true."""
+    return await _download_intermediate_debug(job_id, "recap_data", db, current_user)
+
+
+@router.get("/{job_id}/debug/tts-audio")
+async def download_narration_audio(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Download the TTS narration audio separately. Only available when DEBUG=true."""
+    return await _download_intermediate_debug(job_id, "tts_audio", db, current_user)
+
+
+@router.get("/{job_id}/debug/recap-video")
+async def download_recap_video_debug(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_or_api_key),
+):
+    """Download the recap video with clips extracted but before audio merge. Only available when DEBUG=true."""
+    return await _download_intermediate_debug(job_id, "recap_video", db, current_user)
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
