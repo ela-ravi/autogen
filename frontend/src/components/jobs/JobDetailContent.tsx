@@ -9,6 +9,7 @@ import { useJobProgress } from "@/hooks/useJobProgress";
 import { formatDate, formatFileSize, statusColor } from "@/lib/utils";
 import type { Job } from "@/lib/types";
 import api from "@/lib/api";
+import { StepProgressWithDownloads } from "./StepProgressWithDownloads";
 
 const STEP_NAMES = [
   "",
@@ -96,38 +97,31 @@ export function JobDetailContent({
 
   const isDebug = typeof window !== "undefined" && window.__meta__?.debug === true;
 
-  const handleDownload = async () => {
+  const handleFileDownload = async (endpoint: string, baseFilename: string) => {
     try {
-      const response = await api.get(`/jobs/${jobId}/download`, { responseType: "blob" });
+      const response = await api.get(endpoint, { responseType: "blob" });
       const disposition = response.headers["content-disposition"] || "";
       const match = disposition.match(/filename="?(.+?)"?$/);
-      const filename = match?.[1] || "recap_video.mp4";
+      const filename = match?.[1] || `${baseFilename}`;
       const url = URL.createObjectURL(response.data);
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+      // Success! File downloaded
+      toast.success(`Downloaded ${filename.split("_")[1] || baseFilename}`);
     } catch {
       toast.error("Download not available");
     }
   };
 
+  const handleDownload = async () => {
+    await handleFileDownload(`/jobs/${jobId}/download`, "recap_video.mp4");
+  };
+
   const handleDownloadNarration = async () => {
-    try {
-      const response = await api.get(`/jobs/${jobId}/debug/narration`, { responseType: "blob" });
-      const disposition = response.headers["content-disposition"] || "";
-      const match = disposition.match(/filename="?(.+?)"?$/);
-      const filename = match?.[1] || "narration.mp3";
-      const url = URL.createObjectURL(response.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error("Narration audio not available");
-    }
+    await handleFileDownload(`/jobs/${jobId}/debug/tts-audio`, "narration.mp3");
   };
 
   const handleDelete = async () => {
@@ -282,24 +276,12 @@ export function JobDetailContent({
               <span className="font-medium">{Math.round(activePct)}%</span>
             </div>
 
-            <div className="mt-4 grid grid-cols-7 gap-1">
-              {[1, 2, 3, 4, 5, 6, 7].map((step) => (
-                <div key={step} className="text-center">
-                  <div
-                    className={`mx-auto mb-1 h-2 w-2 rounded-full ${
-                      step < activeStep
-                        ? "bg-green-500"
-                        : step === activeStep
-                          ? "bg-blue-500"
-                          : "bg-gray-200"
-                    }`}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    {STEP_NAMES[step]?.split(" ")[0]}
-                  </p>
-                </div>
-              ))}
-            </div>
+            <StepProgressWithDownloads
+              activeStep={activeStep}
+              job={job}
+              isDebug={isDebug}
+              onDownload={handleFileDownload}
+            />
           </div>
         )}
 
@@ -315,27 +297,27 @@ export function JobDetailContent({
                 {job.status === "stopped" ? "Stopped" : "Failed"} at step {job.current_step} of 7:{" "}
                 {STEP_NAMES[job.current_step] || "Unknown"}
               </p>
-              <div className="grid grid-cols-7 gap-1">
-                {[1, 2, 3, 4, 5, 6, 7].map((step) => (
-                  <div key={step} className="text-center">
-                    <div
-                      className={`mx-auto mb-1 h-2 w-2 rounded-full ${
-                        step < job.current_step
-                          ? "bg-green-500"
-                          : step === job.current_step
-                            ? job.status === "stopped"
-                              ? "bg-orange-500"
-                              : "bg-red-500"
-                            : "bg-gray-200"
-                      }`}
-                    />
-                    <p className="text-[10px] text-muted-foreground">
-                      {STEP_NAMES[step]?.split(" ")[0]}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              <StepProgressWithDownloads
+                activeStep={job.current_step}
+                job={job}
+                isDebug={isDebug}
+                onDownload={handleFileDownload}
+              />
             </div>
+          </div>
+        )}
+
+        {job.status === "completed" && (
+          <div>
+            <p className="mb-3 text-sm text-muted-foreground">
+              All steps completed successfully
+            </p>
+            <StepProgressWithDownloads
+              activeStep={7}
+              job={job}
+              isDebug={isDebug}
+              onDownload={handleFileDownload}
+            />
           </div>
         )}
       </div>
